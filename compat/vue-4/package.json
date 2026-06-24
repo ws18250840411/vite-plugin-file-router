@@ -1,0 +1,9 @@
+{
+  "name": "@vpfr/compat-vue-4",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vue-router": "4.4.5"
+  }
+}

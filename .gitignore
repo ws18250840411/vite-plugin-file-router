@@ -1,0 +1,8 @@
+node_modules
+dist
+*.local
+package-lock.json
+test-results
+playwright-report
+blob-report
+compat/.generated

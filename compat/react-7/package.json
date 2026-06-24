@@ -1,0 +1,9 @@
+{
+  "name": "@vpfr/compat-react-7",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "react-router-dom": "7.17.0",
+    "typescript": "^6.0.3"
+  }
+}
