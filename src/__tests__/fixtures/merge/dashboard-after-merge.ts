@@ -9,6 +9,7 @@ export type FileRoute = {
   index?: boolean
   lazy?: () => Promise<unknown>
   Component?: unknown
+  HydrateFallback?: unknown
   loader?: unknown
   action?: unknown
   ErrorBoundary?: unknown

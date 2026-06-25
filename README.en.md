@@ -67,7 +67,25 @@ Use `outFile: 'src/routes.js'` (or `.mjs` / `.cjs`) for plain JS output without 
 | `pages/_layout.tsx` | nested layout |
 | `pages/(group)/x.tsx` | route group, no URL segment |
 | `pages/not-found.tsx` | 404 catch-all |
+| `pages/loading.tsx` | global loading (React: **RR7+** recommended) |
+| `pages/error.tsx` | global error boundary (React: **RR7+** recommended) |
 | `pages/*.sync.tsx` | force sync import |
+
+### Optional `loading` / `error`
+
+These files are **not required** for `lazy` routes — without them, codegen and navigation still work.
+
+| File | React | Vue |
+|------|-------|-----|
+| `pages/loading.tsx` | `HydrateFallback` on root `_layout` | `loadingComponent` via `defineAsyncComponent` |
+| `pages/error.tsx` | `ErrorBoundary` on root `_layout` | `errorComponent` on layout |
+| per-directory copies | applied to that directory’s `_layout` | same |
+
+**React Router versions**
+
+- **RR7+ (recommended):** `HydrateFallback` / `ErrorBoundary` belong on the **route object**, not inside the `lazy()` return. Use `loading.tsx` when you have async loaders to avoid hydration warnings.
+- **RR6.4:** basic lazy routes work; route-object `HydrateFallback` is **not supported** at runtime (compat passes via `as RouteObject[]`, but the field is ignored). For errors on RR6, export `ErrorBoundary` from the lazy module instead.
+- **Add/remove files:** regen syncs imports and fields; merge always follows fresh scan for `HydrateFallback` / `ErrorBoundary` (see [CHANGELOG](./CHANGELOG.md) 2.0.1).
 
 ---
 
@@ -91,7 +109,7 @@ Regen aligns routes by **RouteId** (`import('./pages/...')`):
 
 ## Router versions
 
-React Router **6.4+** · Vue Router **4+**. Validated in `compat/` (6.4 / 7.x, 4 / 5) via `pnpm test:compat`.
+React Router **6.4+** (use **`pages/loading` / `pages/error` on 7+**) · Vue Router **4+**. Validated in `compat/` (6.4 / 7.x, 4 / 5) via `pnpm test:compat`. `react-7/check-fallback.ts` asserts `HydrateFallback` / `ErrorBoundary` against RR7 `RouteObject` types.
 
 ---
 
@@ -112,7 +130,7 @@ See [CHANGELOG](./CHANGELOG.md). Runtime integration → [unplugin-react-router-
 
 `pnpm demo:react` (:5199) · `pnpm demo:vue` (:5200) — [demo/README.md](./demo/README.md)
 
-~110 unit tests · router compat · Playwright e2e (merge hot-update)
+~130 unit tests · router compat (incl. RR7 `HydrateFallback`) · Playwright e2e
 
 Full reference (Chinese): [README.md](./README.md)
 

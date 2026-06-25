@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.1 - 2026-06-24
+
+### Fixed
+
+- **React Router 7 `HydrateFallback`**: emit static `HydrateFallback` / `ErrorBoundary` on route objects (with top-level imports from `pages/loading.*` and `pages/error.*`) instead of returning them from `lazy()` — fixes blank initial render and console warning under lazy routes. Global `loading.*` applies only to the root layout; nested layouts use a local `loading.*` in the same directory when needed.
+- **Merge regen for loading/error**: when `pages/loading.*` or `pages/error.*` are added or removed, `mergeRouteFiles` now syncs route-level `HydrateFallback` / `ErrorBoundary` from fresh codegen instead of only updating imports while keeping stale route bodies (fixes persistent hydration warning after restoring loading/error files).
+- **Route groups with `_layout`**: keep `(group)/_layout` as nested layout routes instead of flattening group children to the parent level.
+
+- **Vue lazy leaf routes**: when `pages/loading.vue` exists, all lazy page routes now use `defineAsyncComponent` with `loadingComponent` (not only layout routes).
+
 ## 2.0.0
 
 **Major release — route config compiler.** Scans `pages/`, emits physical `routes.ts` for React Router / Vue Router. No virtual modules, no routing runtime.

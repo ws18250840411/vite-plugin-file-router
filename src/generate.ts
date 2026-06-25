@@ -80,6 +80,8 @@ export function generateRouteFiles(resolved: ResolvedOptions, rootNode: RouteNod
     importMode: resolved.importMode,
     baseRoute: resolved.baseRoute,
     outputLanguage: resolved.outputLanguage,
+    globalLoadingPath: rootNode.loadingPath,
+    globalErrorPath: rootNode.errorPath,
   }
 
   const routesContent = resolved.framework === 'vue'

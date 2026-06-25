@@ -40,3 +40,17 @@ test('generated react routes wire loader export into lazy route', async ({ page 
   await expect(page.getByRole('heading', { name: 'Stats' })).toBeVisible()
   await expect(page.getByTestId('stats-note')).toBeVisible()
 })
+
+test('deep link to nested lazy route has no HydrateFallback console warning', async ({ page }) => {
+  const warnings: string[] = []
+  page.on('console', (msg) => {
+    if (msg.type() === 'warning' && /HydrateFallback/i.test(msg.text())) {
+      warnings.push(msg.text())
+    }
+  })
+
+  await page.goto('/dashboard')
+  await expect(page.getByTestId('dashboard-layout')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Dashboard Home' })).toBeVisible()
+  expect(warnings).toEqual([])
+})

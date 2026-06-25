@@ -67,6 +67,54 @@ function sliceText(slice: string): string {
   return slice.replace(/\s+/g, ' ').trim()
 }
 
+/** Route-object fields driven by pages/loading.* and pages/error.* — always follow fresh scan. */
+const CODEGEN_ROUTE_FIELDS = ['HydrateFallback', 'ErrorBoundary'] as const
+
+function routeEntryHead(slice: string): { head: string; rest: string } {
+  const match = slice.match(/\n(\s+)(lazy|Component):/)
+  if (!match || match.index === undefined) {
+    return { head: slice, rest: '' }
+  }
+  return {
+    head: slice.slice(0, match.index),
+    rest: slice.slice(match.index),
+  }
+}
+
+function stripRouteLevelFields(head: string, fields: readonly string[]): string {
+  let result = head
+  for (const field of fields) {
+    result = result.replace(new RegExp(`\\n?[ \\t]*\\b${field}:\\s*[^,\\n]+,?`, 'g'), '')
+  }
+  return result
+}
+
+function extractRouteLevelFields(head: string, fields: readonly string[]): string[] {
+  const lines: string[] = []
+  for (const field of fields) {
+    const re = new RegExp(`\\n?[ \\t]*\\b(${field}:\\s*[^,\\n]+,?)`)
+    const m = head.match(re)
+    if (m) lines.push(m[1].trimEnd())
+  }
+  return lines
+}
+
+function syncCodegenRouteFields(patchedSlice: string, freshSlice: string): string {
+  const { head: patchedHead, rest } = routeEntryHead(patchedSlice)
+  const { head: freshHead } = routeEntryHead(freshSlice)
+
+  const strippedHead = stripRouteLevelFields(patchedHead, CODEGEN_ROUTE_FIELDS)
+  const freshFields = extractRouteLevelFields(freshHead, CODEGEN_ROUTE_FIELDS)
+
+  if (freshFields.length === 0) {
+    return strippedHead + rest
+  }
+
+  const lineIndent = indentOfFirstLine(patchedSlice) + '  '
+  const fieldBlock = freshFields.map((f) => `${lineIndent}${f}`).join('\n')
+  return `${strippedHead.trimEnd()}\n${fieldBlock}${rest}`
+}
+
 function hasLocalRouteEdits(freshContent: string, oldContent: string): boolean {
   const freshMap = collectRouteSliceMap(freshContent)
   const oldMap = collectRouteSliceMap(oldContent)
@@ -101,14 +149,20 @@ function patchRouteSlices(
       if (!childrenMarker || childrenMarker.index === undefined) continue
 
       const freshHeadInSlice = currentSliceText.slice(0, childrenMarker.index).trimEnd()
-      const newHead = reindentRouteBlock(oldChildren.head, indentOfFirstLine(freshHeadInSlice))
+      const newHead = syncCodegenRouteFields(
+        reindentRouteBlock(oldChildren.head, indentOfFirstLine(freshHeadInSlice)),
+        freshChildren.head,
+      )
       const newText = `${newHead}\n${currentSliceText.slice(childrenMarker.index)}`
       result = result.slice(0, slice.start) + newText + result.slice(slice.end)
       continue
     }
 
     if (sliceText(oldSlice) === sliceText(slice.text)) continue
-    const patched = reindentRouteBlock(oldSlice, indentOfFirstLine(slice.text))
+    const patched = syncCodegenRouteFields(
+      reindentRouteBlock(oldSlice, indentOfFirstLine(slice.text)),
+      slice.text,
+    )
     result = result.slice(0, slice.start) + patched + result.slice(slice.end)
   }
 

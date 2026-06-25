@@ -46,42 +46,64 @@ function readPrimitiveValue(
   return null
 }
 
+function readObjectLiteralMeta(source: string, braceIndex: number): RouteMeta | undefined {
+  const end = skipBalanced(source, braceIndex + 1, '{', '}')
+  if (end > source.length || source[end - 1] !== '}') return undefined
+
+  const meta: RouteMeta = {}
+  let i = braceIndex + 1
+  while (i < end - 1) {
+    i = skipIgnorable(source, i)
+    if (i >= end - 1) break
+    if (source[i] === ',') { i++; continue }
+
+    const keyInfo = readIdentifierKey(source, i)
+    if (!keyInfo) { i++; continue }
+    i = skipIgnorable(source, keyInfo.end)
+    if (source[i] !== ':') { i++; continue }
+    i = skipIgnorable(source, i + 1)
+
+    const valueInfo = readPrimitiveValue(source, i)
+    if (valueInfo) {
+      meta[keyInfo.key] = valueInfo.value
+      i = skipIgnorable(source, valueInfo.end)
+      continue
+    }
+    i++
+  }
+
+  return Object.keys(meta).length > 0 ? meta : undefined
+}
+
+function readMetaRhsObjectBrace(source: string, rhsStart: number): number | null {
+  let i = skipIgnorable(source, rhsStart)
+  if (source[i] === '{') return i
+
+  if (!isIdentifierChar(source[i])) return null
+  let j = i + 1
+  while (isIdentifierChar(source[j])) j++
+  i = skipIgnorable(source, j)
+  if (source[i] !== '(') return null
+  i = skipIgnorable(source, i + 1)
+  if (source[i] !== '{') return null
+  return i
+}
+
 /**
- * Extract static `export const meta = { ... }` object fields.
- * Only primitive values are supported — sufficient for title / auth / page id.
+ * Extract static `export const meta = { ... }` or `export const meta = pageMeta({ ... })`.
+ * Only primitive object fields are supported — sufficient for title / auth / anim.
  */
 export function readStaticMeta(source: string): RouteMeta | undefined {
   const masked = maskNonCode(source)
-  const metaExport = /\bexport\s+const\s+meta\s*=\s*\{/g
+  const metaExport = /\bexport\s+const\s+meta\s*=/g
   let match: RegExpExecArray | null
   while ((match = metaExport.exec(masked)) !== null) {
-    const braceIndex = match.index + match[0].length - 1
-    const end = skipBalanced(source, braceIndex + 1, '{', '}')
-    if (end > source.length || source[end - 1] !== '}') continue
+    const rhsStart = match.index + match[0].length
+    const braceIndex = readMetaRhsObjectBrace(source, rhsStart)
+    if (braceIndex === null) continue
 
-    const meta: RouteMeta = {}
-    let i = braceIndex + 1
-    while (i < end - 1) {
-      i = skipIgnorable(source, i)
-      if (i >= end - 1) break
-      if (source[i] === ',') { i++; continue }
-
-      const keyInfo = readIdentifierKey(source, i)
-      if (!keyInfo) { i++; continue }
-      i = skipIgnorable(source, keyInfo.end)
-      if (source[i] !== ':') { i++; continue }
-      i = skipIgnorable(source, i + 1)
-
-      const valueInfo = readPrimitiveValue(source, i)
-      if (valueInfo) {
-        meta[keyInfo.key] = valueInfo.value
-        i = skipIgnorable(source, valueInfo.end)
-        continue
-      }
-      i++
-    }
-
-    return Object.keys(meta).length > 0 ? meta : undefined
+    const meta = readObjectLiteralMeta(source, braceIndex)
+    if (meta) return meta
   }
   return undefined
 }

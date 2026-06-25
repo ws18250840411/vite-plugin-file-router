@@ -56,6 +56,14 @@ function runTsc(projectDir) {
 generateRoutes('react', 'react', 'react-routes.ts')
 generateRoutes('vue', 'vue', 'vue-routes.ts')
 
+const reactRoutes = fs.readFileSync(path.join(generatedDir, 'react-routes.ts'), 'utf-8')
+if (!reactRoutes.includes('HydrateFallback: RouteLoading')) {
+  throw new Error('[compat] react routes must emit root HydrateFallback when pages/loading.tsx exists')
+}
+if (!reactRoutes.includes('ErrorBoundary: RouteError')) {
+  throw new Error('[compat] react routes must emit root ErrorBoundary when pages/error.tsx exists')
+}
+
 for (const name of projects) {
   const dir = path.join(__dirname, name)
   console.log(`\n[compat] tsc ${name}`)

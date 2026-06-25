@@ -103,10 +103,28 @@ import routes from './routes.js'
 | `pages/_layout.tsx` | 目录级布局（嵌套 `children`） |
 | `pages/(auth)/login.tsx` | 路由组，不占 URL 段 → `/login` |
 | `pages/not-found.tsx` | 404 catch-all（可选） |
+| `pages/loading.tsx` | 全局 loading（React：**RR7+** 推荐；见下节） |
+| `pages/error.tsx` | 全局错误边界（React：**RR7+** 推荐；见下节） |
 | `pages/foo.sync.tsx` | 强制同步 import（默认为 lazy） |
 | 页面导出 `meta` / `loader` / `action` 等 | 扫描后写入对应路由字段 |
 
 Vue 使用 `.vue`；`<route>` 块在扫描期读取，编译前须从 SFC 剥离（参考 [demo/vue/vite.config.ts](./demo/vue/vite.config.ts)）。
+
+### `loading` / `error`（可选）
+
+这两个文件**不是 lazy 的前置条件**——没有它们时路由照常生成，`lazy` 也不会报错。
+
+| 文件 | React 生成 | Vue 生成 |
+|------|-----------|---------|
+| `pages/loading.tsx` | 根 `_layout` 挂 `HydrateFallback: RouteLoading` | 根 layout 的 `defineAsyncComponent` + `loadingComponent` |
+| `pages/error.tsx` | 根 `_layout` 挂 `ErrorBoundary: RouteError` | 根 layout 的 `errorComponent` |
+| 子目录内的 `loading.tsx` / `error.tsx` | 挂到**该目录**的 `_layout` | 同上 |
+
+**React Router 版本说明：**
+
+- **RR7+（推荐）**：`HydrateFallback` / `ErrorBoundary` 写在**路由对象**上（不是 `lazy()` 返回值内）。有 async `loader` 时建议提供 `loading.tsx`，可避免 `No HydrateFallback...` 控制台警告。
+- **RR6.4**：基础 lazy 路由可用；route 对象上的 `HydrateFallback` **类型与运行时均不支持**（`compat/react-6` 靠 `as RouteObject[]` 通过编译，但 fallback 不会生效）。RR6 若需错误 UI，请在 `lazy()` 返回值或页面模块 export 中提供 `ErrorBoundary`。
+- **增删文件**：regen 时会同步增删对应字段；merge 会保留你对其他路由字段的手改，但 `HydrateFallback` / `ErrorBoundary` 始终跟随 `pages/` 扫描结果（见 [CHANGELOG](./CHANGELOG.md) 2.0.1）。
 
 ---
 
@@ -170,12 +188,12 @@ fileRouter({
 
 | 框架 | 最低版本 | 说明 |
 |------|----------|------|
-| React Router | **6.4+** | Data Router、`lazy` 路由对象 |
+| React Router | **6.4+** | Data Router、`lazy` 路由对象；**`pages/loading` / `pages/error` 约定建议 7+** |
 | Vue Router | **4+** | 标准 `RouteRecordRaw` |
 
 生成文件内置 `FileRoute` 类型，不 import 路由库。挂载方式与 demo 一致：`routes as RouteObject[]` 或传入 `createRouter`。
 
-`compat/` 对 react-router-dom **6.4 / 7.x**、vue-router **4 / 5** 做编译期检查（`pnpm test:compat`）。
+`compat/` 对 react-router-dom **6.4 / 7.x**、vue-router **4 / 5** 做编译期检查（`pnpm test:compat`）。其中 `react-7/check-fallback.ts` 专门断言 `HydrateFallback` / `ErrorBoundary` 与 RR7 `RouteObject` 类型兼容。
 
 ---
 
@@ -228,7 +246,7 @@ E2E：`e2e/`（React / Vue 导航与 merge 热更新）。
 
 | 类型 | 覆盖 |
 |------|------|
-| 单元测试 ~110 | 路径、codegen、merge、畸形降级、`transformRoutes`、压测 |
+| 单元测试 130+ | 路径、codegen、merge、loading/error fallback、畸形降级、`transformRoutes`、压测 |
 | Router compat | 多版本 `routes.ts` 类型检查 |
 | E2E | demo 导航与 merge 热更新 |
 

@@ -143,4 +143,8 @@ export interface GenerateContext {
   baseRoute: string
   /** @default 'ts' */
   outputLanguage?: OutputLanguage
+  /** Absolute path to pages/loading.* when present at the scan root. */
+  globalLoadingPath?: string | null
+  /** Absolute path to pages/error.* when present at the scan root. */
+  globalErrorPath?: string | null
 }

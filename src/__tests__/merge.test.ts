@@ -1168,7 +1168,10 @@ export default function Reports() {}`,
     expect(slice.indexOf('import("./pages/error.tsx")')).toBeLessThan(
       slice.indexOf('import("./pages/_layout.tsx")'),
     )
-    expect(slice.indexOf('ErrorBoundary:')).toBeLessThan(slice.indexOf('HydrateFallback:'))
+    const routeHead = slice.slice(0, slice.indexOf('lazy:'))
+    expect(routeHead).toContain('HydrateFallback: RouteLoading')
+    expect(routeHead).toContain('ErrorBoundary: RouteError')
+    expect(slice).toContain('Promise.all')
     expect(merged).toContain('./pages/about.tsx')
   })
 

@@ -34,6 +34,13 @@ describe('meta-reader', () => {
     const src = `export const meta = { title: 'Home', requiresAuth: true, id: 'home' }`
     expect(readStaticMeta(src)).toEqual({ title: 'Home', requiresAuth: true, id: 'home' })
   })
+
+  it('reads meta wrapped in a static helper call', async () => {
+    const { readStaticMeta } = await import('../core/meta-reader')
+    const src = `import { pageMeta } from '@/components/AnimatedOutlet'
+export const meta = pageMeta({ anim: 'modal', title: '支付' })`
+    expect(readStaticMeta(src)).toEqual({ anim: 'modal', title: '支付' })
+  })
 })
 
 describe('scanner', () => {
@@ -482,8 +489,42 @@ describe('generate', () => {
       baseRoute: '',
     })
 
-    expect(code).toContain('import("./pages/loading.tsx")')
-    expect(code).toContain('HydrateFallback: l.default')
+    expect(code).toContain("import RouteLoading from './pages/loading.tsx'")
+    expect(code).toContain('HydrateFallback: RouteLoading')
+    expect(code).not.toContain('HydrateFallback: l.default')
+  })
+
+  it('keeps route-group layout nested instead of flattening its children', async () => {
+    const { scanDir } = await import('../core/scanner')
+    const { generateReactRoutes } = await import('../emit/codegen')
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vfr-gen-group-layout-nested-'))
+    dirs.push(root)
+    const pages = path.join(root, 'src', 'pages')
+    const outFile = path.join(root, 'src', 'routes.ts')
+    fs.mkdirSync(path.join(pages, '(app)'), { recursive: true })
+    fs.writeFileSync(path.join(pages, '_layout.tsx'), 'export default function Root() {}')
+    fs.writeFileSync(path.join(pages, 'loading.tsx'), 'export default function Loading() {}')
+    fs.writeFileSync(path.join(pages, '(app)', '_layout.tsx'), 'export default function App() {}')
+    fs.writeFileSync(path.join(pages, '(app)', 'dashboard.tsx'), 'export default function Dash() {}')
+
+    const tree = scanDir(pages, '', { extensions: ['tsx'], exclude: [], baseRoute: '' })
+    const code = generateReactRoutes(tree, {
+      root,
+      pagesDir: pages,
+      outFile,
+      framework: 'react',
+      importMode: 'lazy',
+      baseRoute: '',
+      globalLoadingPath: tree.loadingPath,
+      globalErrorPath: tree.errorPath,
+    })
+
+    const appLayout = code.indexOf('import("./pages/(app)/_layout.tsx")')
+    const dashboard = code.indexOf('import("./pages/(app)/dashboard.tsx")')
+    expect(appLayout).toBeGreaterThan(-1)
+    expect(dashboard).toBeGreaterThan(appLayout)
+    expect([...code.matchAll(/HydrateFallback: RouteLoading/g)].length).toBe(1)
   })
 
   it('wires layout loading.vue into vue defineAsyncComponent', async () => {
@@ -507,10 +548,41 @@ describe('generate', () => {
       framework: 'vue',
       importMode: 'lazy',
       baseRoute: '',
+      globalLoadingPath: tree.loadingPath,
+      globalErrorPath: tree.errorPath,
     })
 
     expect(code).toContain('import { defineAsyncComponent } from \'vue\'')
     expect(code).toContain('./pages/loading.vue')
     expect(code).toContain('loadingComponent:')
+  })
+
+  it('wires loading.vue into vue lazy leaf routes', async () => {
+    const { scanDir } = await import('../core/scanner')
+    const { generateVueRoutes } = await import('../emit/codegen')
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vfr-vue-leaf-loading-'))
+    dirs.push(root)
+    const pages = path.join(root, 'src', 'pages')
+    const outFile = path.join(root, 'src', 'routes.ts')
+    fs.mkdirSync(pages, { recursive: true })
+    fs.writeFileSync(path.join(pages, 'loading.vue'), '<template><div>Loading</div></template>')
+    fs.writeFileSync(path.join(pages, 'about.vue'), '<template><div>About</div></template>')
+
+    const tree = scanDir(pages, '', { extensions: ['vue'], exclude: [], baseRoute: '' })
+    const code = generateVueRoutes(tree, {
+      root,
+      pagesDir: pages,
+      outFile,
+      framework: 'vue',
+      importMode: 'lazy',
+      baseRoute: '',
+      globalLoadingPath: tree.loadingPath,
+      globalErrorPath: tree.errorPath,
+    })
+
+    expect(code).toContain('defineAsyncComponent')
+    expect(code).toContain('loadingComponent:')
+    expect(code).not.toMatch(/component: \(\) => import\("\.\/pages\/about\.vue"\)/)
   })
 })

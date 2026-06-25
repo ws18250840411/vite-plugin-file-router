@@ -4,8 +4,8 @@ Generates `routes.ts` from minimal `fixtures/`, then type-checks against multipl
 
 | Project   | Package            | Role                          |
 |-----------|--------------------|-------------------------------|
-| `react-6` | react-router-dom 6.4.5 | Minimum documented React line |
-| `react-7` | react-router-dom 7.17.0 | Current React line           |
+| `react-6` | react-router-dom 6.4.5 | Minimum documented React line (uses `as RouteObject[]`; route-object `HydrateFallback` is RR7-only at runtime) |
+| `react-7` | react-router-dom 7.17.0 | Current React line; `check-fallback.ts` asserts `HydrateFallback` / `ErrorBoundary` on root layout |
 | `vue-4`   | vue-router 4.4.5   | Vue Router 4                 |
 | `vue-5`   | vue-router 5.0.4   | Vue Router 5                 |
 

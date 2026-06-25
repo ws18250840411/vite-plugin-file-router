@@ -11,5 +11,5 @@
     "allowImportingTsExtensions": true,
     "isolatedModules": true
   },
-  "include": ["check.ts", "../shims.d.ts", "../.generated/react-routes.ts"]
+  "include": ["check.ts", "check-fallback.ts", "../shims.d.ts", "../.generated/react-routes.ts"]
 }
