@@ -224,7 +224,7 @@ fileRouter({
 ## 质量门禁
 
 - **CI**：GitHub Actions 在 ubuntu / windows / macOS 与 **Node 24.11** 上运行单元测试、构建、Router 类型检查与 npm 包检查；另开 Browser E2E job 在三平台跑 Playwright；ubuntu 上运行 `npm run bench` 性能回归。（配置在 `.github/workflows/`，**仅适用于 GitHub**）
-- **Gitee Go**：仓库已提供 `.workflow/ci.yml`，在 Gitee 仓库页开通「Gitee Go / 流水线」后，push 到 `master` 会自动跑 verify 等价步骤 + bench（Linux / **Node 24.11**）。跨平台矩阵仍以 GitHub Actions 为准。
+- **Gitee Go**：`.workflow/ci.yml` 仅跑 validate（单元测试 + 构建 + compat + `pack:check`），适合 Gitee 构建机；**E2E 与 bench** 请本地执行 `npm run verify` / `npm run bench`，或由 GitHub Actions 承担。
 - **单元测试（160）**：真实文件系统可移植性、AST property-based merge fuzz、跨进程输出锁竞争、对抗性 merge 与工业级回归。
 - **E2E（19）**：React / Vue demo 与 merge 热更新；`demo/vue-rootless` 覆盖无根 layout 与 route group 浏览器路径。
 - **发布**：打 `v*` tag 触发 `npm run verify`（单元测试 + 构建 + compat + E2E + `pack:check`），校验 tag 与 `package.json` 版本一致后以 npm provenance 发布。

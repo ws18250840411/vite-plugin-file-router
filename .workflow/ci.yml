@@ -1,9 +1,10 @@
-# Gitee Go pipeline — mirrors npm run verify + bench on Linux.
-# Enable: Gitee repo → 流水线 → 开通 Gitee Go → 选择「从仓库导入」或提交本文件后自动识别。
+# Gitee Go pipeline — validate only (test, build, compat, pack:check).
+# E2E and bench run locally via `npm run verify` or on GitHub Actions.
+# Enable: Gitee repo → 流水线 → 开通 Gitee Go → 从仓库导入本文件。
 # Note: .github/workflows/*.yml is GitHub Actions only; it does not run on Gitee.
 version: '1.0'
 name: ci
-displayName: CI 验证与 E2E
+displayName: CI 验证
 triggers:
   push:
     branches:
@@ -25,38 +26,10 @@ stages:
       - step: build@nodejs
         name: npm_validate
         displayName: npm test + build + compat + pack:check
-        nodeVersion: 24.11.0
+        nodeVersion: 22.18.0
         commands:
           - npm ci --registry=https://registry.npmmirror.com
           - npm test
           - npm run build
           - npm run test:compat
           - npm run pack:check
-
-  - stage: e2e
-    displayName: Playwright 浏览器 E2E
-    strategy: fast
-    trigger: auto
-    steps:
-      - step: build@nodejs
-        name: playwright_e2e
-        displayName: npm run test:e2e
-        nodeVersion: 24.11.0
-        commands:
-          - npm ci --registry=https://registry.npmmirror.com
-          - npx playwright install --with-deps chromium
-          - npm run test:e2e
-
-  - stage: bench
-    displayName: 性能基准
-    strategy: naturally
-    trigger: auto
-    steps:
-      - step: build@nodejs
-        name: npm_bench
-        displayName: npm run bench
-        nodeVersion: 24.11.0
-        commands:
-          - npm ci --registry=https://registry.npmmirror.com
-          - export NODE_OPTIONS=--expose-gc
-          - npm run bench
