@@ -2,7 +2,7 @@
 
 面向 Vite 的 React Router / Vue Router 约定式路由插件。扫描 `pages/`，生成项目内可审阅、可提交、可手动修改的 `routes.ts`，并在文件变化时安全合并更新。
 
-当前目标版本：Node.js 22.18+ / 24.11+、Vite 8.1+、React Router 7.18+、Vue Router 5.2+。不包含历史 Router 兼容分支。
+当前目标版本：Node.js **24.11+**、Vite 8.1+、React Router 7.18+、Vue Router 5.2+。不包含历史 Router 兼容分支。本地开发推荐使用 `.nvmrc`（`nvm use`）或 fnm/volta 对齐 Node 24.11.0。
 
 ## 快速接入
 
@@ -210,7 +210,7 @@ fileRouter({
 - 页面 stat/AST 缓存；不影响路由配置的组件修改不会重建 routes。
 - HMR 保留页面模块，只在路由配置变化时追加 routes 模块。
 
-本机基准（Darwin arm64、Node 24.6.0，`npm run bench`）：
+本机基准（Darwin arm64、Node 24.11+，`npm run bench`）：
 
 | 框架 | 路由数 | 冷生成 | 无变化重跑 | 1% 手改+增删合并 |
 |------|-------:|-------:|-----------:|-----------------:|
@@ -223,8 +223,8 @@ fileRouter({
 
 ## 质量门禁
 
-- **CI**：GitHub Actions 在 ubuntu / windows / macOS 与 Node 22.18、24.11 上运行单元测试、构建、Router 类型检查与 npm 包检查；另开 Browser E2E job 在三平台跑 Playwright；ubuntu / Node 22 上运行 `npm run bench` 性能回归。（配置在 `.github/workflows/`，**仅适用于 GitHub**）
-- **Gitee Go**：仓库已提供 `.workflow/ci.yml`，在 Gitee 仓库页开通「Gitee Go / 流水线」后，push 到 `master` 会自动跑 verify 等价步骤 + bench（Linux / Node 22.18）。跨平台矩阵仍以 GitHub Actions 为准。
+- **CI**：GitHub Actions 在 ubuntu / windows / macOS 与 **Node 24.11** 上运行单元测试、构建、Router 类型检查与 npm 包检查；另开 Browser E2E job 在三平台跑 Playwright；ubuntu 上运行 `npm run bench` 性能回归。（配置在 `.github/workflows/`，**仅适用于 GitHub**）
+- **Gitee Go**：仓库已提供 `.workflow/ci.yml`，在 Gitee 仓库页开通「Gitee Go / 流水线」后，push 到 `master` 会自动跑 verify 等价步骤 + bench（Linux / **Node 24.11**）。跨平台矩阵仍以 GitHub Actions 为准。
 - **单元测试（160）**：真实文件系统可移植性、AST property-based merge fuzz、跨进程输出锁竞争、对抗性 merge 与工业级回归。
 - **E2E（19）**：React / Vue demo 与 merge 热更新；`demo/vue-rootless` 覆盖无根 layout 与 route group 浏览器路径。
 - **发布**：打 `v*` tag 触发 `npm run verify`（单元测试 + 构建 + compat + E2E + `pack:check`），校验 tag 与 `package.json` 版本一致后以 npm provenance 发布。

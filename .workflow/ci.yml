@@ -25,7 +25,7 @@ stages:
       - step: build@nodejs
         name: npm_validate
         displayName: npm test + build + compat + pack:check
-        nodeVersion: 22.18.0
+        nodeVersion: 24.11.0
         commands:
           - npm ci --registry=https://registry.npmmirror.com
           - npm test
@@ -41,7 +41,7 @@ stages:
       - step: build@nodejs
         name: playwright_e2e
         displayName: npm run test:e2e
-        nodeVersion: 22.18.0
+        nodeVersion: 24.11.0
         commands:
           - npm ci --registry=https://registry.npmmirror.com
           - npx playwright install --with-deps chromium
@@ -55,7 +55,7 @@ stages:
       - step: build@nodejs
         name: npm_bench
         displayName: npm run bench
-        nodeVersion: 22.18.0
+        nodeVersion: 24.11.0
         commands:
           - npm ci --registry=https://registry.npmmirror.com
           - export NODE_OPTIONS=--expose-gc
