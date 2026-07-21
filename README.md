@@ -223,7 +223,7 @@ fileRouter({
 
 ## 质量门禁
 
-- **CI**：GitHub Actions 在 ubuntu / windows / macOS 与 Node 20.19、22.12、24.x 上运行单元测试、构建、Router 类型检查与 npm 包检查；另开 Browser E2E job 在三平台跑 Playwright。
+- **CI**：GitHub Actions 在 ubuntu / windows / macOS 与 Node 20.19、22.12、24.x 上运行单元测试、构建、Router 类型检查与 npm 包检查；另开 Browser E2E job 在三平台跑 Playwright；ubuntu / Node 22 上运行 `npm run bench` 性能回归。
 - **单元测试（160）**：真实文件系统可移植性、AST property-based merge fuzz、跨进程输出锁竞争、对抗性 merge 与工业级回归。
 - **E2E（19）**：React / Vue demo 与 merge 热更新；`demo/vue-rootless` 覆盖无根 layout 与 route group 浏览器路径。
 - **发布**：打 `v*` tag 触发 `npm run verify`（单元测试 + 构建 + compat + E2E + `pack:check`），校验 tag 与 `package.json` 版本一致后以 npm provenance 发布。
