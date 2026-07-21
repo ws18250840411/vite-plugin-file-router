@@ -31,7 +31,6 @@ export function nameToSegment(name: string): string {
 }
 
 export function joinUrlPath(base: string, segment: string): string {
-  if (isCatchAllSegment(segment)) return segment
   if (!base || base === '/') return `/${segment}`
   return `${base}/${segment}`
 }

@@ -12,6 +12,6 @@ describe('inferOutputLanguage', () => {
   it('returns js for javascript extensions', () => {
     expect(inferOutputLanguage('/app/src/routes.js')).toBe('js')
     expect(inferOutputLanguage('/app/src/routes.mjs')).toBe('js')
-    expect(inferOutputLanguage('/app/src/routes.cjs')).toBe('js')
+    expect(() => inferOutputLanguage('/app/src/routes.cjs')).toThrow(/ESM/)
   })
 })

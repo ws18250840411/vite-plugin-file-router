@@ -49,6 +49,30 @@ async function waitForHttp(url, timeoutMs = 30_000) {
   throw new Error(`Timeout waiting for ${url}`)
 }
 
+async function waitForStableModule(url, timeoutMs = 30_000) {
+  const start = Date.now()
+  let previous = ''
+  let stableResponses = 0
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await fetch(url, { cache: 'no-store' })
+      const content = res.ok ? await res.text() : ''
+      if (content && content === previous) {
+        stableResponses++
+        if (stableResponses >= 2) return
+      } else {
+        previous = content
+        stableResponses = 0
+      }
+    } catch {
+      previous = ''
+      stableResponses = 0
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error(`Timeout waiting for stable Vite module ${url}`)
+}
+
 function startVite(config, port) {
   return spawn(
     process.platform === 'win32' ? 'npx.cmd' : 'npx',
@@ -59,6 +83,7 @@ function startVite(config, port) {
 
 const reactRoutes = path.join(root, 'demo/react/src/routes.ts')
 const vueRoutes = path.join(root, 'demo/vue/src/routes.ts')
+const vueRootlessRoutes = path.join(root, 'demo/vue-rootless/src/routes.ts')
 
 const children = []
 
@@ -70,18 +95,23 @@ function track(proc) {
   return proc
 }
 
-async function boot(config, port, routesFile, marker) {
+async function boot(config, port, routesFile, marker, entry) {
   track(startVite(config, port))
   await Promise.all([
     waitForRoutesFile(routesFile, marker),
     waitForHttp(`http://localhost:${port}/`),
   ])
+  await Promise.all([
+    waitForStableModule(`http://localhost:${port}/src/${entry}`),
+    waitForStableModule(`http://localhost:${port}/src/routes.ts`),
+  ])
 }
 
 try {
   await Promise.all([
-    boot('demo/react/vite.config.ts', 5199, reactRoutes, 'export default routes'),
-    boot('demo/vue/vite.config.ts', 5200, vueRoutes, 'export default routes'),
+    boot('demo/react/vite.config.ts', 5199, reactRoutes, 'export default routes', 'main.tsx'),
+    boot('demo/vue/vite.config.ts', 5200, vueRoutes, 'export default routes', 'main.ts'),
+    boot('demo/vue-rootless/vite.config.ts', 5202, vueRootlessRoutes, 'export default routes', 'main.ts'),
   ])
 
   const { createServer } = await import('node:http')

@@ -4,17 +4,19 @@ React / Vue 参考实现，用于验证文件约定、codegen 输出及 dev watc
 
 | 目录 | 框架 | 端口 | 启动 |
 |------|------|------|------|
-| [`react/`](./react) | React Router 7 · TypeScript | **5199** | `pnpm demo:react` |
-| [`react-js/`](./react-js) | React Router 7 · **纯 JS** (`routes.js` + `.jsx`) | **5201** | `pnpm demo:react-js` |
-| [`vue/`](./vue) | Vue Router 5 | **5200** | `pnpm demo:vue` |
+| [`react/`](./react) | React Router 7 · TypeScript | **5199** | `npm run demo:react` |
+| [`react-js/`](./react-js) | React Router 7 · **纯 JS** (`routes.js` + `.jsx`) | **5201** | `npm run demo:react-js` |
+| [`vue/`](./vue) | Vue Router 5 | **5200** | `npm run demo:vue` |
+| [`vue-rootless/`](./vue-rootless) | Vue Router 5 · 无根布局 | **5202** | `npm run demo:vue-rootless` |
 
 在 `packages/vite-plugin-file-router` 目录：
 
 ```bash
-pnpm build        # 首次须构建插件
-pnpm demo:react     # http://localhost:5199
-pnpm demo:react-js  # http://localhost:5201  (纯 JS)
-pnpm demo:vue       # http://localhost:5200
+npm run build
+npm run demo:react
+npm run demo:react-js
+npm run demo:vue
+npm run demo:vue-rootless
 ```
 
 ## 能力覆盖

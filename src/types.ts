@@ -2,21 +2,18 @@
 
 export type OutputLanguage = 'ts' | 'js'
 
-/** Static route metadata read from `export const meta = { ... }` in page files. */
-export interface RouteMeta {
-  title?: string
-  requiresAuth?: boolean
-  /** Arbitrary primitive meta fields (string | number | boolean). */
-  [key: string]: string | number | boolean | undefined
-}
+/** Static route metadata read from page modules / Vue `<route>` blocks. */
+export type RouteMeta = Record<string, unknown>
 
 /** React Router 7 route module exports detected at scan time. */
 export interface RouteModuleExports {
   loader?: boolean
   action?: boolean
   ErrorBoundary?: boolean
+  HydrateFallback?: boolean
   shouldRevalidate?: boolean
   handle?: boolean
+  middleware?: boolean
 }
 
 /** Overrides from Vue `<route>` custom block. */
@@ -29,6 +26,8 @@ export interface VueRouteBlockOverride {
 }
 
 export interface RouteNode {
+  /** Stable generator identity relative to `pagesDir`. */
+  routeId: string
   /** Route segment relative to parent (`null` for layout roots / groups). */
   path: string | null
   /** Full URL path used for diagnostics and typed routes. */
@@ -43,12 +42,20 @@ export interface RouteNode {
   errorPath: string | null
   /** Whether the page/layout file has `export default`. */
   hasDefaultExport: boolean
+  /** Whether the directory loading module has a default export. */
+  loadingHasDefaultExport?: boolean
+  /** Whether the directory error module has a default export. */
+  errorHasDefaultExport?: boolean
+  /** Source read/parse failure captured during scanning. */
+  scanError?: string
   /** Static metadata extracted from the page file. */
   meta?: RouteMeta
   /** Page-level React Router module exports. */
   moduleExports?: RouteModuleExports
   /** `_layout` module exports in this directory. */
   layoutModuleExports?: RouteModuleExports
+  /** Per-file import override for the directory layout. */
+  layoutImportOverride?: 'sync' | 'lazy'
   /** Vue `<route>` block overrides. */
   routeBlock?: VueRouteBlockOverride
   /** True for 404 / not-found catch-all pages. */
@@ -66,7 +73,13 @@ export interface RouteNode {
 
 export interface RouteDiagnostic {
   level: 'warning' | 'error'
-  code: 'duplicate-route' | 'optional-route-overlap' | 'scan-error'
+  code:
+    | 'duplicate-route'
+    | 'optional-route-overlap'
+    | 'scan-error'
+    | 'missing-default-export'
+    | 'invalid-route-block'
+    | 'conflicting-route-export'
   message: string
   routes: string[]
 }
@@ -81,7 +94,7 @@ export interface FileRouterOptions {
   pagesDir?: string
   /**
    * Generated routes file path relative to project root.
-   * Use `.ts` (default) or `.js` / `.mjs` / `.cjs` — extension selects TypeScript vs plain JS output.
+   * Use `.ts` (default), `.js`, or `.mjs`; generated client route modules are ESM.
    * @default 'src/routes.ts'
    */
   outFile?: string
@@ -132,6 +145,8 @@ export interface FileRouterOptions {
    * @default true
    */
   logDiagnostics?: boolean
+  /** Stop generation when route diagnostics contain errors. @default true */
+  failOnRouteError?: boolean
 }
 
 export interface GenerateContext {

@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 
 const generatedDir = path.join(__dirname, '.generated')
-const projects = ['react-6', 'react-7', 'vue-4', 'vue-5']
+const projects = ['react-7', 'vue-5']
 
 function resolveTscBin(pkgRoot) {
   try {

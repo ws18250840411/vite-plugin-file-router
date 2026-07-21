@@ -24,7 +24,7 @@ describe('path-parser', () => {
   it('joins url paths', () => {
     expect(joinUrlPath('', 'about')).toBe('/about')
     expect(joinUrlPath('/app', 'home')).toBe('/app/home')
-    expect(joinUrlPath('/app', '*')).toBe('*')
+    expect(joinUrlPath('/app', '*')).toBe('/app/*')
   })
 })
 
@@ -128,10 +128,10 @@ describe('codegen', () => {
       baseRoute: '',
     })
 
-    expect(code).toContain('FileRoute')
+    expect(code).toContain('satisfies RouteObject[]')
     expect(code).toContain('import("./pages/index.tsx")')
     expect(code).toContain('Component: m.default')
-    expect(code).not.toContain('react-router-dom')
+    expect(code).toContain("import type { RouteObject } from 'react-router-dom'")
     expect(code).not.toContain('GeneratedRoutePath')
     expect(code).toContain('export default routes')
   })
@@ -245,7 +245,7 @@ describe('generate', () => {
     const { changed } = runGeneration(resolved, () => {}, () => {})
     expect(changed).toBe(true)
     expect(fs.existsSync(path.join(root, 'src', 'routes.ts'))).toBe(true)
-    expect(fs.readFileSync(path.join(root, 'src', 'routes.ts'), 'utf-8')).toContain('FileRoute')
+    expect(fs.readFileSync(path.join(root, 'src', 'routes.ts'), 'utf-8')).toContain('RouteObject[]')
 
     const { changed: changedAgain } = runGeneration(resolved, () => {}, () => {})
     expect(changedAgain).toBe(false)
@@ -268,7 +268,7 @@ describe('generate', () => {
     runGeneration(resolved, () => {}, () => {})
     const out = path.join(root, 'src', 'router', 'table.ts')
     const code = fs.readFileSync(out, 'utf-8')
-    expect(code).toContain('export type FileRoute')
+    expect(code).toContain('satisfies RouteObject[]')
     expect(code).toMatch(/import\(["']\.\.\/pages\/index\.tsx["']\)/)
   })
 
@@ -315,9 +315,9 @@ describe('generate', () => {
       baseRoute: '',
     })
 
-    expect(code).toContain('FileRoute')
+    expect(code).toContain('satisfies RouteRecordRaw[]')
     expect(code).toContain('import("./pages/index.vue")')
-    expect(code).not.toContain('vue-router')
+    expect(code).toContain("import type { RouteRecordRaw } from 'vue-router'")
     expect(code).toContain('path: "/user/:id"')
   })
 

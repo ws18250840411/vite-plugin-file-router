@@ -4,6 +4,6 @@
   "type": "module",
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vue-router": "5.0.4"
+    "vue-router": "5.2.0"
   }
 }

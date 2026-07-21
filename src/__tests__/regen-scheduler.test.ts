@@ -53,8 +53,36 @@ describe('regen-scheduler', () => {
     expect(count).toBe(1)
 
     vi.advanceTimersByTime(100)
-    expect(count).toBe(2)
+    expect(count).toBe(1)
 
+    scheduler.dispose()
+  })
+
+  it('reports scheduled failures without poisoning later runs', () => {
+    vi.useFakeTimers()
+    const error = new Error('invalid route')
+    const failures: unknown[] = []
+    let runs = 0
+    const scheduler = createRegenScheduler(() => {
+      runs++
+      if (runs === 1) throw error
+    }, 10, (reason) => failures.push(reason))
+
+    scheduler.schedule()
+    expect(() => vi.advanceTimersByTime(10)).not.toThrow()
+    expect(failures).toEqual([error])
+
+    scheduler.schedule()
+    vi.advanceTimersByTime(10)
+    expect(runs).toBe(2)
+    scheduler.dispose()
+  })
+
+  it('keeps runNow failures synchronous for build gating', () => {
+    const error = new Error('invalid route')
+    const scheduler = createRegenScheduler(() => { throw error }, 10, () => {})
+
+    expect(() => scheduler.runNow()).toThrow(error)
     scheduler.dispose()
   })
 })

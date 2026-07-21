@@ -1,9 +1,9 @@
 declare module '*.tsx' {
-  const component: unknown
+  const component: any
   export default component
 }
 
 declare module '*.vue' {
-  const component: unknown
+  const component: any
   export default component
 }

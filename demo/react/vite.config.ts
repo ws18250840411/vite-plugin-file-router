@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   root: __dirname,
+  cacheDir: path.resolve(__dirname, '../../node_modules/.vite-react-demo'),
   plugins: [
     react(),
     fileRouter({

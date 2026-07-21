@@ -1,138 +1,129 @@
 # vite-plugin-file-router
 
-Vite plugin for React Router / Vue Router: scans `pages/` and maintains a project-local `routes.ts`. Import it in your entry and create the Router — no per-page route boilerplate.
+File-based routing for Vite with React Router and Vue Router. It scans `pages/` and maintains a physical, reviewable, hand-editable `routes.ts` through safe three-way AST merging.
 
-Per-route fields (`meta`, `loader`, `handle`, …) can be edited in `routes.ts`; hand-edits are preserved on regen when `pages/` changes (RouteId merge). Config generation only — no Router injection or runtime navigation.
+Targets Node.js 20.19+ / 22.12+, Vite 8.1+, React Router 7.18+, and Vue Router 5.2+. Historical Router branches are intentionally excluded.
 
-| Need | Choice |
-|------|--------|
-| Folder-driven structure, auditable editable route table | **This plugin** |
-| Runtime Router injection, page transitions | [unplugin-react-router-dom](../unplugin-react-router-dom) |
-| Virtual modules, no `routes.ts` on disk | [vite-plugin-pages](https://github.com/hannoeru/vite-plugin-pages) |
-
----
-
-## Quick start
+## Quick Start
 
 ```bash
-pnpm add -D vite-plugin-file-router
-pnpm add react-router-dom   # or vue-router
+npm i -D vite-plugin-file-router
+npm i react-router-dom # use vue-router for Vue
 ```
 
 ```ts
-// vite.config.ts
+// vite.config.ts - React
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
 import fileRouter from 'vite-plugin-file-router'
 
 export default defineConfig({
-  plugins: [
-    fileRouter({
-      framework: 'react',
-      pagesDir: 'src/pages',
-      outFile: 'src/routes.ts',
-    }),
-  ],
+  plugins: [react(), fileRouter({ framework: 'react' })],
 })
 ```
 
+```ts
+// vite.config.ts - Vue
+import vue from '@vitejs/plugin-vue'
+import { defineConfig } from 'vite'
+import fileRouter from 'vite-plugin-file-router'
+
+export default defineConfig({
+  plugins: [vue(), fileRouter({ framework: 'vue' })],
+})
+```
+
+Create `src/pages/index.tsx` or `src/pages/index.vue`, start Vite once, then mount the generated routes:
+
 ```tsx
-// main.tsx (React)
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
-import type { RouteObject } from 'react-router-dom'
 import routes from './routes'
 
-<RouterProvider router={createBrowserRouter(routes as RouteObject[])} />
+<RouterProvider router={createBrowserRouter(routes)} />
 ```
 
 ```ts
-// main.ts (Vue)
+import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
+import App from './App.vue'
 import routes from './routes'
 
-createApp(App).use(createRouter({ history: createWebHistory(), routes })).mount('#app')
+createApp(App)
+  .use(createRouter({ history: createWebHistory(), routes }))
+  .mount('#app')
 ```
 
-### JavaScript projects
+The default input is `src/pages`; the default output is `src/routes.ts`. Vue `<route>` blocks are removed automatically before `@vitejs/plugin-vue` compiles the SFC.
 
-Use `outFile: 'src/routes.js'` (or `.mjs` / `.cjs`) for plain JS output without `export type`. Set `extensions: ['jsx', 'js']` to match page files. `require('vite-plugin-file-router')` works from `vite.config.cjs`. Demo: `pnpm demo:react-js` → [demo/react-js](./demo/react-js).
+## Conventions
 
----
+| File | Route |
+|------|-------|
+| `index.tsx` | `/` |
+| `user/[id].tsx` | `/user/:id` |
+| `blog/[[id]].tsx` | `/blog/:id?` |
+| `docs/[...slug].tsx` | `/docs/*` |
+| `(auth)/login.tsx` | `/login` |
+| `_layout.tsx` | directory layout |
+| `not-found.tsx` | catch-all |
+| `loading.tsx` / `error.tsx` | layout fallbacks |
+| `report.sync.tsx` | forced static import |
 
-## File conventions
+Vue uses the same rules with `.vue` files.
 
-| Path | Effect |
-|------|--------|
-| `pages/index.tsx` | index `/` |
-| `pages/about.tsx` | `/about` |
-| `pages/user/[id].tsx` | `/user/:id` |
-| `pages/_layout.tsx` | nested layout |
-| `pages/(group)/x.tsx` | route group, no URL segment |
-| `pages/not-found.tsx` | 404 catch-all |
-| `pages/loading.tsx` | global loading (React: **RR7+** recommended) |
-| `pages/error.tsx` | global error boundary (React: **RR7+** recommended) |
-| `pages/*.sync.tsx` | force sync import |
+React pages can export `meta`, `loader`, `action`, `middleware`, `ErrorBoundary`, `HydrateFallback`, and `shouldRevalidate`. A default component export is required. `meta` becomes static `handle`; defining both `meta` and runtime `handle` is rejected.
 
-### Optional `loading` / `error`
+Vue JSON/JSON5/YAML `<route>` blocks support `path`, `name`, `alias`, `props`, and `meta`, including on layouts.
 
-These files are **not required** for `lazy` routes — without them, codegen and navigation still work.
+## Editable Generated Routes
 
-| File | React | Vue |
-|------|-------|-----|
-| `pages/loading.tsx` | `HydrateFallback` on root `_layout` | `loadingComponent` via `defineAsyncComponent` |
-| `pages/error.tsx` | `ErrorBoundary` on root `_layout` | `errorComponent` on layout |
-| per-directory copies | applied to that directory’s `_layout` | same |
+`routes.ts` is a supported customization surface:
 
-**React Router versions**
+- Filesystem additions, removals, and nesting follow `pages/`.
+- Edited or deleted fields are preserved.
+- Custom imports, declarations, comments, and routes are preserved.
+- Untouched fields receive fresh generated values.
+- Invalid syntax is never overwritten.
+- Duplicate `@file-route` markers or merged import/declaration conflicts abort the write.
 
-- **RR7+ (recommended):** `HydrateFallback` / `ErrorBoundary` belong on the **route object**, not inside the `lazy()` return. Use `loading.tsx` when you have async loaders to avoid hydration warnings.
-- **RR6.4:** basic lazy routes work; route-object `HydrateFallback` is **not supported** at runtime (compat passes via `as RouteObject[]`, but the field is ignored). For errors on RR6, export `ErrorBoundary` from the lazy module instead.
-- **Add/remove files:** regen syncs imports and fields; merge always follows fresh scan for `HydrateFallback` / `ErrorBoundary` (see [CHANGELOG](./CHANGELOG.md) 2.0.1).
+Keep the trailing `@vite-file-router-manifest` comment. It stores generator fingerprints only and has no runtime behavior.
+If it is damaged or from an unsupported version, merging safely falls back without a baseline; existing fields remain, but previous generated-field deletions cannot be inferred.
 
----
+## Options
 
-## Merge behavior
+```ts
+fileRouter({
+  framework: 'react',
+  pagesDir: 'src/pages',
+  outFile: 'src/routes.ts',
+  importMode: 'lazy',
+  baseRoute: '/app',
+  exclude: ['**/_components/**'],
+  transformRoutes(root) { return root },
+})
+```
 
-Regen aligns routes by **RouteId** (`import('./pages/...')`):
+Generated client routes are ESM. Use `.ts`, `.js`, or `.mjs`; `.cjs` is rejected. CommonJS Vite configs remain supported.
 
-- Structure follows `pages/` scans
-- Field-level hand-edits on existing pages are **preserved** (local-wins)
-- Renames do not migrate edits; unparseable `routes.ts` → full regen
+## Reliability and Performance
 
----
+- Babel AST analysis and token fingerprints.
+- Official Vue SFC parsing.
+- Atomic writes and overwrite protection.
+- Final merged-output syntax validation and rollback on replacement failure.
+- Incremental file/AST caching and route-aware HMR.
+- Direct type validation against `RouteObject[]` / `RouteRecordRaw[]`.
 
-## Customization layers
+Representative Darwin arm64 / Node 22 benchmark (`npm run bench`):
 
-1. **`pages/`** — URLs, nesting, dynamic segments  
-2. **`routes.ts`** — per-route overrides (merged)  
-3. **`vite.config`** — `baseRoute`, `importMode`, `transformRoutes`, `exclude`, …
+| Framework | Routes | Cold | No-op | 1% edit/churn merge |
+|-----------|-------:|-----:|------:|--------------------:|
+| React | 1,000 | 149 ms | 7 ms | 176 ms |
+| React | 10,000 | 1.07 s | 73 ms | 1.36 s |
+| Vue | 1,000 | 114 ms | 8 ms | 103 ms |
+| Vue | 10,000 | 1.10 s | 79 ms | 847 ms |
 
----
-
-## Router versions
-
-React Router **6.4+** (use **`pages/loading` / `pages/error` on 7+**) · Vue Router **4+**. Validated in `compat/` (6.4 / 7.x, 4 / 5) via `pnpm test:compat`. `react-7/check-fallback.ts` asserts `HydrateFallback` / `ErrorBoundary` against RR7 `RouteObject` types.
-
----
-
-## Migration from 1.x
-
-2.0 removes virtual modules, animation runtime, and auto `RouterProvider` injection.
-
-1. Add `fileRouter({ outFile: 'src/routes.ts' })` to Vite config  
-2. `import routes from './routes'` and create the Router in `main`  
-3. Remove virtual route imports and `vite-plugin-file-router/client` types  
-4. Run dev to generate `routes.ts`
-
-See [CHANGELOG](./CHANGELOG.md). Runtime integration → [unplugin-react-router-dom](../unplugin-react-router-dom).
-
----
-
-## Demo & quality
-
-`pnpm demo:react` (:5199) · `pnpm demo:vue` (:5200) — [demo/README.md](./demo/README.md)
-
-~130 unit tests · router compat (incl. RR7 `HydrateFallback`) · Playwright e2e
-
-Full reference (Chinese): [README.md](./README.md)
+Run the complete release gate with `npm run verify`.
 
 ## License
 

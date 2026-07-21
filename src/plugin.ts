@@ -3,6 +3,8 @@ import path from 'node:path'
 
 import type { Plugin, ViteDevServer } from 'vite'
 
+import { invalidateScanCache } from './core/scanner'
+import { stripVueRouteBlocks } from './core/vue-route-block'
 import { resolveOptions, runGeneration } from './generate'
 import type { FileRouterOptions } from './types'
 
@@ -13,7 +15,11 @@ export interface RegenScheduler {
 }
 
 /** @internal Exported for unit tests. */
-export function createRegenScheduler(run: () => void, debounceMs = 50): RegenScheduler {
+export function createRegenScheduler(
+  run: () => void,
+  debounceMs = 50,
+  onScheduledError: (error: unknown) => void = (error) => console.error(error),
+): RegenScheduler {
   let timer: ReturnType<typeof setTimeout> | undefined
   let inFlight = false
   let rerun = false
@@ -42,7 +48,11 @@ export function createRegenScheduler(run: () => void, debounceMs = 50): RegenSch
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
       timer = undefined
-      flush()
+      try {
+        flush()
+      } catch (error) {
+        onScheduledError(error)
+      }
     }, debounceMs)
   }
 
@@ -51,7 +61,13 @@ export function createRegenScheduler(run: () => void, debounceMs = 50): RegenSch
     timer = undefined
   }
 
-  return { schedule, runNow: flush, dispose }
+  const runNow = () => {
+    if (timer) clearTimeout(timer)
+    timer = undefined
+    flush()
+  }
+
+  return { schedule, runNow, dispose }
 }
 
 function isUnderPages(file: string, pagesDir: string): boolean {
@@ -94,11 +110,21 @@ export default function fileRouter(options: FileRouterOptions = {}): Plugin {
 
   const scheduler = createRegenScheduler(() => {
     regenerate(devServer)
-  }, debounceMs)
+  }, debounceMs, (error) => {
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error)
+    if (devServer) devServer.config.logger.error(message)
+    else console.error(message)
+  })
 
   return {
     name: 'vite-plugin-file-router',
     enforce: 'pre',
+
+    transform(code, id) {
+      if ((options.framework ?? 'react') !== 'vue' || !id.endsWith('.vue') || id.includes('?')) return undefined
+      const stripped = stripVueRouteBlocks(code, id)
+      return stripped === code ? undefined : { code: stripped, map: null }
+    },
 
     configResolved(config) {
       projectRoot = config.root
@@ -113,22 +139,25 @@ export default function fileRouter(options: FileRouterOptions = {}): Plugin {
 
     configureServer(server) {
       devServer = server
-      if (fs.existsSync(pagesDir)) {
-        server.watcher.add(pagesDir)
-      }
+      server.watcher.add(fs.existsSync(pagesDir) ? pagesDir : path.dirname(pagesDir))
     },
 
     watchChange(file, change) {
       if (change.event !== 'create' && change.event !== 'update' && change.event !== 'delete') return
       if (!isUnderPages(file, pagesDir)) return
+      if (change.event === 'update') return
       scheduler.schedule()
     },
 
-    handleHotUpdate({ file, server }) {
+    async handleHotUpdate({ file, server, read, modules }) {
       if (isUnderPages(file, pagesDir)) {
-        scheduler.runNow()
+        await read()
+        invalidateScanCache(file)
+        const changed = regenerate()
+        if (!changed) return undefined
         const mod = server.moduleGraph.getModuleById(outFile)
-        return mod ? [mod] : []
+        if (mod) server.moduleGraph.invalidateModule(mod)
+        return mod ? [...new Set([...modules, mod])] : undefined
       }
       return undefined
     },

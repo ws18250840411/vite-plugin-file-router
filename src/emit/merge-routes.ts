@@ -1,199 +1,358 @@
 import {
-  collectPositionedRouteSlices,
-  collectRouteSliceMap,
-  extractChildrenSlice,
-  extractImportLines,
-  extractPrelude,
-  extractRoutesArraySection,
-  primaryRouteId,
+  type AstRouteDescriptor,
+  type RoutePropertyDescriptor,
+  parseRoutesFile,
 } from './parse-routes-file'
 
-function indentOfFirstLine(text: string): string {
-  const line = text.split('\n')[0] ?? ''
-  return line.match(/^(\s*)/)?.[1] ?? ''
+const MANIFEST_RE = /\n?\/\*\s*@vite-file-router-manifest\s+([A-Za-z0-9+/=]+)\s*\*\/\s*$/
+const MANIFEST_VERSION = 2
+
+interface RouteBaseline {
+  properties: Record<string, string>
+  children: string[]
 }
 
-function reindentRouteBlock(text: string, targetIndent: string): string {
-  const lines = text.split('\n')
-  if (lines.length === 0) return text
+interface GeneratedManifest {
+  version: number
+  routes: Record<string, RouteBaseline>
+  imports: string[]
+  statements: string[]
+}
 
-  const sourceIndent = indentOfFirstLine(text)
+export class RouteMergeError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RouteMergeError'
+  }
+}
+
+function flattenRoutes(routes: AstRouteDescriptor[], map = new Map<string, AstRouteDescriptor>()) {
+  for (const route of routes) {
+    if (route.id) map.set(route.id, route)
+    flattenRoutes(route.children, map)
+  }
+  return map
+}
+
+function indexRouteAliases(routes: AstRouteDescriptor[], map = new Map<string, AstRouteDescriptor>()) {
+  for (const route of routes) {
+    if (route.id) map.set(route.id, route)
+    for (const sourceId of route.sourceIds) map.set(sourceId, route)
+    indexRouteAliases(route.children, map)
+  }
+  return map
+}
+
+function matchingRoute(
+  route: AstRouteDescriptor,
+  routes: Map<string, AstRouteDescriptor>,
+): AstRouteDescriptor | undefined {
+  return (route.id ? routes.get(route.id) : undefined)
+    ?? route.sourceIds.map((sourceId) => routes.get(sourceId)).find(Boolean)
+}
+
+function routeBaseline(route: AstRouteDescriptor): RouteBaseline {
+  return {
+    properties: Object.fromEntries(
+      route.properties
+        .filter((property) => property.key !== 'children')
+        .map((property) => [property.key, property.fingerprint]),
+    ),
+    children: route.children.flatMap((child) => child.id ? [child.id] : []),
+  }
+}
+
+interface StatementDescriptor {
+  source: string
+  fingerprint: string
+}
+
+function customStatements(parsed: ReturnType<typeof parseRoutesFile>): StatementDescriptor[] {
+  if (!parsed) return []
+  return parsed.statements
+    .filter((statement) => statement.kind === 'custom')
+    .map((statement) => ({ source: statement.source, fingerprint: statement.fingerprint }))
+}
+
+function createManifest(content: string): GeneratedManifest {
+  const parsed = parseRoutesFile(content)
+  if (!parsed) throw new RouteMergeError('Freshly generated routes could not be parsed.')
+  assertUniqueMarkers(parsed.routes, 'Generated routes')
+  const routes: Record<string, RouteBaseline> = {}
+  for (const [id, route] of flattenRoutes(parsed.routes)) routes[id] = routeBaseline(route)
+  return {
+    version: MANIFEST_VERSION,
+    routes,
+    imports: parsed.imports.map((item) => item.fingerprint),
+    statements: customStatements(parsed).map((statement) => statement.fingerprint),
+  }
+}
+
+function encodeManifest(manifest: GeneratedManifest): string {
+  return Buffer.from(JSON.stringify(manifest), 'utf8').toString('base64')
+}
+
+function readManifest(content: string): GeneratedManifest | null {
+  const match = content.match(MANIFEST_RE)
+  if (!match) return null
+  try {
+    const manifest = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8')) as unknown
+    return isGeneratedManifest(manifest) ? manifest : null
+  } catch {
+    return null
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isGeneratedManifest(value: unknown): value is GeneratedManifest {
+  if (!isRecord(value) || value.version !== MANIFEST_VERSION) return false
+  if (!isRecord(value.routes) || !Array.isArray(value.imports) || !Array.isArray(value.statements)) return false
+  if (!value.imports.every((item) => typeof item === 'string')) return false
+  if (!value.statements.every((item) => typeof item === 'string')) return false
+  return Object.values(value.routes).every((route) => {
+    if (!isRecord(route) || !isRecord(route.properties) || !Array.isArray(route.children)) return false
+    return Object.values(route.properties).every((item) => typeof item === 'string')
+      && route.children.every((item) => typeof item === 'string')
+  })
+}
+
+function stripManifest(content: string): string {
+  return content.replace(MANIFEST_RE, '').trimEnd() + '\n'
+}
+
+function appendManifest(content: string, manifest: GeneratedManifest): string {
+  return `${stripManifest(content)}\n/* @vite-file-router-manifest ${encodeManifest(manifest)} */\n`
+}
+
+export function attachGeneratedManifest(content: string): string {
+  const base = stripManifest(content)
+  return appendManifest(base, createManifest(base))
+}
+
+function commonIndent(lines: string[]): number {
+  const values = lines
+    .filter((line) => line.trim())
+    .map((line) => line.match(/^\s*/)?.[0].length ?? 0)
+  return values.length ? Math.min(...values) : 0
+}
+
+function reindent(source: string, indent: string): string {
+  const lines = source.trim().split('\n')
+  const remove = commonIndent(lines.slice(1))
   return lines
     .map((line, index) => {
-      if (line.trim() === '') return ''
-      if (index === 0) return targetIndent + line.trimStart()
-      const stripped = line.startsWith(sourceIndent)
-        ? line.slice(sourceIndent.length)
-        : line.trimStart()
-      return targetIndent + stripped
+      if (!line.trim()) return ''
+      return indent + (index === 0 ? line.trimStart() : line.slice(Math.min(remove, line.length)))
     })
     .join('\n')
 }
 
-function mergeImportPrelude(freshContent: string, oldContent: string, mergedRoutes: string): string {
-  const freshPrelude = extractPrelude(freshContent)
-  const oldPrelude = extractPrelude(oldContent)
-  const oldImports = extractImportLines(oldPrelude)
-  const freshImportText = freshPrelude
+function propertyMap(route: AstRouteDescriptor | undefined): Map<string, RoutePropertyDescriptor> {
+  return new Map((route?.properties ?? []).map((property) => [property.key, property]))
+}
 
-  const extraImports: string[] = []
-  for (const line of oldImports) {
-    if (freshImportText.includes(line)) continue
+function resolveProperties(
+  fresh: AstRouteDescriptor,
+  current: AstRouteDescriptor | undefined,
+  baseline: RouteBaseline | undefined,
+): { properties: RoutePropertyDescriptor[]; deleted: Set<string> } {
+  const freshMap = propertyMap(fresh)
+  const currentMap = propertyMap(current)
+  const resolved: RoutePropertyDescriptor[] = []
+  const seen = new Set<string>()
+  const deleted = new Set<string>()
 
-    const defaultImport = line.match(/^import\s+([A-Za-z_$][\w$]*)\s+from\s+['"](.+?)['"]/)
-    if (defaultImport && mergedRoutes.includes(defaultImport[1])) {
-      extraImports.push(line)
-      continue
+  if (current) {
+    for (const property of current.properties) {
+      if (property.key === 'children') continue
+      const oldFingerprint = baseline?.properties[property.key]
+      const next = freshMap.get(property.key)
+      const userChanged = !baseline || oldFingerprint === undefined || property.fingerprint !== oldFingerprint
+      if (userChanged) resolved.push(property)
+      else if (next) resolved.push(next)
+      seen.add(property.key)
     }
-
-    const namedDefault = line.match(
-      /^import\s*\{\s*default\s+as\s+([A-Za-z_$][\w$]*)/,
-    )
-    if (namedDefault && mergedRoutes.includes(namedDefault[1])) {
-      extraImports.push(line)
+    if (baseline) {
+      for (const key of Object.keys(baseline.properties)) {
+        if (!currentMap.has(key)) deleted.add(key)
+      }
     }
   }
 
-  if (extraImports.length === 0) return freshPrelude
-
-  const lines = freshPrelude.split('\n')
-  const insertAt = lines.findIndex((line) => line.trim().startsWith('export type'))
-  const importBlock = extraImports.join('\n')
-  if (insertAt < 0) return `${freshPrelude.trimEnd()}\n${importBlock}\n`
-  return [...lines.slice(0, insertAt), importBlock, '', ...lines.slice(insertAt)].join('\n')
-}
-
-function sliceText(slice: string): string {
-  return slice.replace(/\s+/g, ' ').trim()
-}
-
-/** Route-object fields driven by pages/loading.* and pages/error.* — always follow fresh scan. */
-const CODEGEN_ROUTE_FIELDS = ['HydrateFallback', 'ErrorBoundary'] as const
-
-function routeEntryHead(slice: string): { head: string; rest: string } {
-  const match = slice.match(/\n(\s+)(lazy|Component):/)
-  if (!match || match.index === undefined) {
-    return { head: slice, rest: '' }
+  for (const property of fresh.properties) {
+    if (property.key === 'children' || seen.has(property.key) || deleted.has(property.key)) continue
+    resolved.push(property)
   }
-  return {
-    head: slice.slice(0, match.index),
-    rest: slice.slice(match.index),
-  }
+  return { properties: resolved, deleted }
 }
 
-function stripRouteLevelFields(head: string, fields: readonly string[]): string {
-  let result = head
-  for (const field of fields) {
-    result = result.replace(new RegExp(`\\n?[ \\t]*\\b${field}:\\s*[^,\\n]+,?`, 'g'), '')
-  }
-  return result
+function renderCustomRoute(route: AstRouteDescriptor, indent: string): string {
+  return reindent(route.text, indent)
 }
 
-function extractRouteLevelFields(head: string, fields: readonly string[]): string[] {
-  const lines: string[] = []
-  for (const field of fields) {
-    const re = new RegExp(`\\n?[ \\t]*\\b(${field}:\\s*[^,\\n]+,?)`)
-    const m = head.match(re)
-    if (m) lines.push(m[1].trimEnd())
-  }
-  return lines
-}
-
-function syncCodegenRouteFields(patchedSlice: string, freshSlice: string): string {
-  const { head: patchedHead, rest } = routeEntryHead(patchedSlice)
-  const { head: freshHead } = routeEntryHead(freshSlice)
-
-  const strippedHead = stripRouteLevelFields(patchedHead, CODEGEN_ROUTE_FIELDS)
-  const freshFields = extractRouteLevelFields(freshHead, CODEGEN_ROUTE_FIELDS)
-
-  if (freshFields.length === 0) {
-    return strippedHead + rest
-  }
-
-  const lineIndent = indentOfFirstLine(patchedSlice) + '  '
-  const fieldBlock = freshFields.map((f) => `${lineIndent}${f}`).join('\n')
-  return `${strippedHead.trimEnd()}\n${fieldBlock}${rest}`
-}
-
-function hasLocalRouteEdits(freshContent: string, oldContent: string): boolean {
-  const freshMap = collectRouteSliceMap(freshContent)
-  const oldMap = collectRouteSliceMap(oldContent)
-
-  const freshIds = [...freshMap.keys()].sort()
-  const oldIds = [...oldMap.keys()].sort()
-  if (freshIds.join('\0') !== oldIds.join('\0')) return true
-
-  return freshIds.some((id) => sliceText(oldMap.get(id) ?? '') !== sliceText(freshMap.get(id) ?? ''))
-}
-
-function patchRouteSlices(
-  content: string,
-  oldMap: Map<string, string>,
-  oldFileContent: string,
+function renderRoute(
+  fresh: AstRouteDescriptor,
+  current: AstRouteDescriptor | undefined,
+  baseline: GeneratedManifest | null,
+  currentMap: Map<string, AstRouteDescriptor>,
+  indent: string,
 ): string {
-  const slices = collectPositionedRouteSlices(content)
-  let result = content
+  const childIndent = indent + '  '
+  const resolved = resolveProperties(fresh, current, fresh.id ? baseline?.routes[fresh.id] : undefined)
+  const lines = [`${indent}/* @file-route ${JSON.stringify(fresh.id ?? 'generated:anonymous')} */`, `${indent}{`]
 
-  for (const slice of [...slices].sort((a, b) => b.start - a.start)) {
-    const oldSlice = slice.id ? oldMap.get(slice.id) : undefined
-    if (!oldSlice) continue
-
-    if (slice.hasChildren) {
-      const currentSliceText = result.slice(slice.start, slice.end)
-      const freshChildren = extractChildrenSlice(slice.text)
-      const oldChildren = extractChildrenSlice(oldSlice)
-      if (!freshChildren || !oldChildren) continue
-      if (sliceText(freshChildren.head) === sliceText(oldChildren.head)) continue
-
-      const childrenMarker = /\bchildren:\s*\[/.exec(currentSliceText)
-      if (!childrenMarker || childrenMarker.index === undefined) continue
-
-      const freshHeadInSlice = currentSliceText.slice(0, childrenMarker.index).trimEnd()
-      const newHead = syncCodegenRouteFields(
-        reindentRouteBlock(oldChildren.head, indentOfFirstLine(freshHeadInSlice)),
-        freshChildren.head,
-      )
-      const newText = `${newHead}\n${currentSliceText.slice(childrenMarker.index)}`
-      result = result.slice(0, slice.start) + newText + result.slice(slice.end)
-      continue
-    }
-
-    if (sliceText(oldSlice) === sliceText(slice.text)) continue
-    const patched = syncCodegenRouteFields(
-      reindentRouteBlock(oldSlice, indentOfFirstLine(slice.text)),
-      slice.text,
-    )
-    result = result.slice(0, slice.start) + patched + result.slice(slice.end)
+  for (const property of resolved.properties) {
+    const rendered = reindent(property.source, childIndent)
+    lines.push(rendered.endsWith(',') ? rendered : `${rendered},`)
+    if (property.trailingComments) lines.push(reindent(property.trailingComments, childIndent))
   }
 
-  return result
+  const freshChildIds = new Set(fresh.children.flatMap((child) => child.id ? [child.id] : []))
+  const baselineChildIds = new Set(fresh.id ? baseline?.routes[fresh.id]?.children ?? [] : [])
+  const freshChildAliases = new Set(fresh.children.flatMap((child) => child.sourceIds))
+  const customChildren = (current?.children ?? []).filter((child) => {
+    return !child.id || (
+      !freshChildIds.has(child.id)
+      && !baselineChildIds.has(child.id)
+      && !child.sourceIds.some((sourceId) => freshChildAliases.has(sourceId))
+      && !child.markerId
+    )
+  })
+  if (fresh.children.length > 0 || customChildren.length > 0) {
+    lines.push(`${childIndent}children: [`)
+    for (const child of fresh.children) {
+      const currentChild = matchingRoute(child, currentMap)
+      if (child.id && baselineChildIds.has(child.id) && !currentChild) continue
+      const rendered = renderRoute(
+        child,
+        currentChild,
+        baseline,
+        currentMap,
+        childIndent + '  ',
+      )
+      lines.push(rendered + ',')
+    }
+
+    for (const customChild of customChildren) {
+      lines.push(renderCustomRoute(customChild, childIndent + '  ') + ',')
+    }
+    lines.push(`${childIndent}],`)
+  }
+
+  lines.push(`${indent}}`)
+  return lines.join('\n')
+}
+
+function preservedImports(
+  currentContent: string,
+  fresh: NonNullable<ReturnType<typeof parseRoutesFile>>,
+  current: NonNullable<ReturnType<typeof parseRoutesFile>>,
+  baseline: GeneratedManifest | null,
+): string[] {
+  const freshFingerprints = new Set(fresh.imports.map((item) => item.fingerprint))
+  const baselineImports = new Set(baseline?.imports ?? [])
+  return current.imports
+    .filter((item) => {
+      const value = item.fingerprint
+      if (freshFingerprints.has(value)) return false
+      if (baseline) return !baselineImports.has(value)
+      const isSimpleGenerated = /^import\s+(?:\{\s*default\s+as\s+)?[A-Za-z_$][\w$]*/.test(item.text)
+        && item.source.startsWith('.')
+      return !isSimpleGenerated || /\bfrom\s+['"](?!.*(?:pages|screens|routes)\/)/.test(item.text)
+    })
+    .map((item) => currentContent.slice(item.start, item.end))
+}
+
+function preservedStatements(
+  current: NonNullable<ReturnType<typeof parseRoutesFile>>,
+  baseline: GeneratedManifest | null,
+): string[] {
+  const baselineStatements = new Set(baseline?.statements ?? [])
+  return customStatements(current)
+    .filter((statement) => !baseline || !baselineStatements.has(statement.fingerprint))
+    .map((statement) => statement.source)
 }
 
 /**
- * Merge freshly generated routes with an existing routes file.
- * Patches fresh output in place so formatting stays stable; leaf routes keep local edits.
- *
- * Orphan routes (no pages/ import) in the old file are not preserved — output follows fresh scan only.
+ * Three-way AST merge: baseline identifies user edits, current supplies exact user source,
+ * and fresh supplies route structure plus untouched generated fields.
  */
 export function mergeRouteFiles(freshContent: string, oldContent: string): string {
   if (freshContent === oldContent) return oldContent
-
-  const freshSection = extractRoutesArraySection(freshContent)
-  const oldSection = extractRoutesArraySection(oldContent)
-  if (!freshSection) return freshContent
-  if (!oldSection) return freshContent
-
-  const oldMap = collectRouteSliceMap(oldContent)
-  if (oldMap.size === 0) return freshContent
-  if (!hasLocalRouteEdits(freshContent, oldContent)) return freshContent
-
-  let result = patchRouteSlices(freshContent, oldMap, oldContent)
-
-  const prelude = mergeImportPrelude(freshContent, oldContent, result)
-  const freshPrelude = extractPrelude(freshContent)
-  if (prelude !== freshPrelude) {
-    result = `${prelude}${result.slice(freshPrelude.length)}`
+  const freshBase = stripManifest(freshContent)
+  const currentBase = stripManifest(oldContent)
+  const freshManifest = readManifest(freshContent) ?? createManifest(freshBase)
+  const fresh = parseRoutesFile(freshBase)
+  const current = parseRoutesFile(currentBase)
+  if (!fresh) throw new RouteMergeError('Freshly generated routes could not be parsed.')
+  if (!current) {
+    throw new RouteMergeError('Existing routes file is not valid JavaScript/TypeScript; refusing to overwrite it.')
   }
 
+  assertUniqueMarkers(fresh.routes, 'Generated routes')
+  assertUniqueMarkers(current.routes, 'Existing routes file')
+
+  const baseline = readManifest(oldContent)
+  const currentMap = indexRouteAliases(current.routes)
+  const extraImports = preservedImports(currentBase, fresh, current, baseline)
+  const extraStatements = preservedStatements(current, baseline)
+
+  const beforeDeclaration = freshBase.slice(0, fresh.declaration.start).trimEnd()
+  const declarationHead = freshBase.slice(fresh.declaration.start, fresh.array.start + 1)
+  const suffix = freshBase.slice(fresh.array.end - 1)
+  const additions = [...extraImports, ...extraStatements]
+  const prelude = additions.length
+    ? `${beforeDeclaration}\n${additions.join('\n')}\n\n`
+    : `${beforeDeclaration}\n\n`
+  const rendered: string[] = []
+  for (const route of fresh.routes) {
+    const currentRoute = matchingRoute(route, currentMap)
+    if (route.id && baseline?.routes[route.id] && !currentRoute) continue
+    rendered.push(renderRoute(
+      route,
+      currentRoute,
+      baseline,
+      currentMap,
+      '  ',
+    ))
+  }
+  const freshTopLevelIds = new Set(fresh.routes.flatMap((route) => route.id ? [route.id] : []))
+  const freshTopLevelAliases = new Set(fresh.routes.flatMap((route) => route.sourceIds))
+  const baselineTopLevelIds = new Set(baseline
+    ? current.routes.flatMap((route) => route.id && baseline.routes[route.id] ? [route.id] : [])
+    : [])
+  for (const route of current.routes) {
+    if (
+      route.markerId
+      || (route.id && (freshTopLevelIds.has(route.id) || baselineTopLevelIds.has(route.id)))
+      || route.sourceIds.some((sourceId) => freshTopLevelAliases.has(sourceId))
+    ) continue
+    rendered.push(renderCustomRoute(route, '  '))
+  }
+  const renderedRoutes = rendered.join(',\n')
+
+  const result = appendManifest(`${prelude}${declarationHead}\n${renderedRoutes}\n${suffix}`, freshManifest)
+  if (!parseRoutesFile(stripManifest(result))) {
+    throw new RouteMergeError('Merged routes would not be valid JavaScript/TypeScript; refusing to overwrite the existing file.')
+  }
   return result
+}
+
+function assertUniqueMarkers(routes: AstRouteDescriptor[], label: string): void {
+  const seen = new Set<string>()
+  const visit = (items: AstRouteDescriptor[]) => {
+    for (const route of items) {
+      if (route.markerId) {
+        if (seen.has(route.markerId)) {
+          throw new RouteMergeError(`${label} contains duplicate @file-route marker ${JSON.stringify(route.markerId)}.`)
+        }
+        seen.add(route.markerId)
+      }
+      visit(route.children)
+    }
+  }
+  visit(routes)
 }

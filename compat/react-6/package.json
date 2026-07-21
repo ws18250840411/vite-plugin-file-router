@@ -1,9 +1,0 @@
-{
-  "name": "@vpfr/compat-react-6",
-  "private": true,
-  "type": "module",
-  "devDependencies": {
-    "react-router-dom": "6.4.5",
-    "typescript": "^6.0.3"
-  }
-}

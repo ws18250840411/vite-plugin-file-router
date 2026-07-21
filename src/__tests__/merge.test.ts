@@ -275,10 +275,10 @@ describe('merge-routes', () => {
     expect(merged).not.toMatch(/,\s*,/)
   })
 
-  it('mergeRouteFiles returns fresh when old file cannot be parsed', () => {
+  it('mergeRouteFiles refuses to overwrite an unrecognized file', () => {
     const fresh = `export const routes: FileRoute[] = []\nexport default routes\n`
     const old = `export const broken = true\n`
-    expect(mergeRouteFiles(fresh, old)).toBe(fresh)
+    expect(() => mergeRouteFiles(fresh, old)).toThrow()
   })
 
   describe('route groups', () => {
@@ -1169,8 +1169,8 @@ export default function Reports() {}`,
       slice.indexOf('import("./pages/_layout.tsx")'),
     )
     const routeHead = slice.slice(0, slice.indexOf('lazy:'))
-    expect(routeHead).toContain('HydrateFallback: RouteLoading')
-    expect(routeHead).toContain('ErrorBoundary: RouteError')
+    expect(routeHead).not.toContain('HydrateFallback: RouteLoading')
+    expect(routeHead).not.toContain('ErrorBoundary: RouteError')
     expect(slice).toContain('Promise.all')
     expect(merged).toContain('./pages/about.tsx')
   })

@@ -1,265 +1,233 @@
 # vite-plugin-file-router
 
-面向 React Router / Vue Router 的 Vite 插件：扫描 `pages/` 目录，生成并维护项目内的 `routes.ts`；应用入口导入该文件并创建 Router 即可，无需为每个页面手写路由配置。除了可以通过文件命名方式修改路由参数，还可以手动直接修改`routes.ts`文件，后续的路由信息更新以手动修改为主，解决几乎所有的业务场景。
+面向 Vite 的 React Router / Vue Router 约定式路由插件。扫描 `pages/`，生成项目内可审阅、可提交、可手动修改的 `routes.ts`，并在文件变化时安全合并更新。
 
-## 快速开始
+当前目标版本：Node.js 20.19+ / 22.12+、Vite 8.1+、React Router 7.18+、Vue Router 5.2+。不包含历史 Router 兼容分支。
 
-### 安装
+## 快速接入
+
+### 1. 安装
+
+React：
 
 ```bash
-pnpm add -D vite-plugin-file-router
-pnpm add react-router-dom   # React；Vue 改为 vue-router
+npm i -D vite-plugin-file-router
+npm i react-router-dom
 ```
 
-### 配置 Vite
+Vue：
+
+```bash
+npm i -D vite-plugin-file-router
+npm i vue-router
+```
+
+### 2. 配置 Vite
+
+React：
 
 ```ts
 // vite.config.ts
+import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import fileRouter from 'vite-plugin-file-router'
 
 export default defineConfig({
   plugins: [
-    fileRouter({
-      framework: 'react',      // 或 'vue'
-      pagesDir: 'src/pages',
-      outFile: 'src/routes.ts',
-    }),
+    react(),
+    fileRouter({ framework: 'react' }),
   ],
 })
 ```
 
-### 挂载路由（应用层）
+Vue：
 
-**React**
+```ts
+// vite.config.ts
+import vue from '@vitejs/plugin-vue'
+import { defineConfig } from 'vite'
+import fileRouter from 'vite-plugin-file-router'
+
+export default defineConfig({
+  plugins: [
+    vue(),
+    fileRouter({ framework: 'vue' }),
+  ],
+})
+```
+
+默认扫描 `src/pages`，生成 `src/routes.ts`。Vue `<route>` 块会自动在 SFC 编译前移除，无需额外 transform 插件。
+
+### 3. 创建首页
 
 ```tsx
-// main.tsx
+// src/pages/index.tsx
+export default function Home() {
+  return <h1>Home</h1>
+}
+```
+
+Vue 项目使用 `src/pages/index.vue`。
+
+### 4. 挂载 Router
+
+React：
+
+```tsx
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
-import type { RouteObject } from 'react-router-dom'
 import routes from './routes'
 
 createRoot(document.getElementById('root')!).render(
-  <RouterProvider router={createBrowserRouter(routes as RouteObject[])} />,
+  <RouterProvider router={createBrowserRouter(routes)} />,
 )
 ```
 
-**Vue**
+Vue：
 
 ```ts
-// main.ts
 import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'
 import routes from './routes'
 
-const app = createApp(App)
-app.use(createRouter({ history: createWebHistory(), routes }))
-app.mount('#app')
+createApp(App)
+  .use(createRouter({ history: createWebHistory(), routes }))
+  .mount('#app')
 ```
 
-> 首次 dev/build 后生成路由文件。可提交 Git 由团队共审，也可 `.gitignore` 仅在 CI 生成。
-
-### 纯 JavaScript 项目
-
-TypeScript 用默认 `outFile: 'src/routes.ts'`。纯 JS 工程：
-
-```js
-// vite.config.js
-import fileRouter from 'vite-plugin-file-router'
-
-export default {
-  plugins: [
-    fileRouter({
-      framework: 'react',
-      pagesDir: 'src/pages',
-      outFile: 'src/routes.js',       // .js / .mjs / .cjs → 生成无类型的 JS
-      extensions: ['jsx', 'js'],      // 页面扩展名与项目一致
-    }),
-  ],
-}
-```
-
-```js
-// main.jsx
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
-import routes from './routes.js'
-
-<RouterProvider router={createBrowserRouter(routes)} />
-```
-
-`vite.config.cjs` 可用 `require('vite-plugin-file-router')`（包已提供 CJS 构建）。完整示例：`pnpm demo:react-js`（[demo/react-js](./demo/react-js)）。
-
----
+首次启动 Vite 后生成路由文件。建议将 `routes.ts` 提交到 Git，便于审阅配置变化和业务定制。
 
 ## 文件约定
 
-| 文件 / 目录 | URL / 行为 |
-|-------------|------------|
-| `pages/index.tsx` | 索引路由 `/` |
+| 文件 | 路由 |
+|------|------|
+| `pages/index.tsx` | `/` |
 | `pages/about.tsx` | `/about` |
 | `pages/user/[id].tsx` | `/user/:id` |
-| `pages/_layout.tsx` | 目录级布局（嵌套 `children`） |
-| `pages/(auth)/login.tsx` | 路由组，不占 URL 段 → `/login` |
-| `pages/not-found.tsx` | 404 catch-all（可选） |
-| `pages/loading.tsx` | 全局 loading（React：**RR7+** 推荐；见下节） |
-| `pages/error.tsx` | 全局错误边界（React：**RR7+** 推荐；见下节） |
-| `pages/foo.sync.tsx` | 强制同步 import（默认为 lazy） |
-| 页面导出 `meta` / `loader` / `action` 等 | 扫描后写入对应路由字段 |
+| `pages/blog/[[id]].tsx` | `/blog/:id?` |
+| `pages/docs/[...slug].tsx` | `/docs/*` |
+| `pages/docs/[[...slug]].tsx` | 可选 catch-all |
+| `pages/(auth)/login.tsx` | `/login`，目录组不进入 URL |
+| `pages/_layout.tsx` | 当前目录布局 |
+| `pages/not-found.tsx` / `404.tsx` | catch-all |
+| `pages/loading.tsx` | 当前布局 loading |
+| `pages/error.tsx` | 当前布局错误边界 |
+| `pages/report.sync.tsx` | 强制同步导入 |
+| `pages/report.lazy.tsx` | 强制异步导入 |
 
-Vue 使用 `.vue`；`<route>` 块在扫描期读取，编译前须从 SFC 剥离（参考 [demo/vue/vite.config.ts](./demo/vue/vite.config.ts)）。
+Vue 页面使用 `.vue`，规则一致。
 
-### `loading` / `error`（可选）
+## 页面配置
 
-这两个文件**不是 lazy 的前置条件**——没有它们时路由照常生成，`lazy` 也不会报错。
+### React Router
 
-| 文件 | React 生成 | Vue 生成 |
-|------|-----------|---------|
-| `pages/loading.tsx` | 根 `_layout` 挂 `HydrateFallback: RouteLoading` | 根 layout 的 `defineAsyncComponent` + `loadingComponent` |
-| `pages/error.tsx` | 根 `_layout` 挂 `ErrorBoundary: RouteError` | 根 layout 的 `errorComponent` |
-| 子目录内的 `loading.tsx` / `error.tsx` | 挂到**该目录**的 `_layout` | 同上 |
+页面必须默认导出组件。插件通过 AST 读取当前 React Router 路由模块导出：
 
-**React Router 版本说明：**
+```tsx
+export const meta = { title: 'Users', auth: { role: 'admin' } }
+export async function loader() {}
+export async function action() {}
+export const middleware = []
+export function ErrorBoundary() {}
+export function shouldRevalidate() { return false }
 
-- **RR7+（推荐）**：`HydrateFallback` / `ErrorBoundary` 写在**路由对象**上（不是 `lazy()` 返回值内）。有 async `loader` 时建议提供 `loading.tsx`，可避免 `No HydrateFallback...` 控制台警告。
-- **RR6.4**：基础 lazy 路由可用；route 对象上的 `HydrateFallback` **类型与运行时均不支持**（`compat/react-6` 靠 `as RouteObject[]` 通过编译，但 fallback 不会生效）。RR6 若需错误 UI，请在 `lazy()` 返回值或页面模块 export 中提供 `ErrorBoundary`。
-- **增删文件**：regen 时会同步增删对应字段；merge 会保留你对其他路由字段的手改，但 `HydrateFallback` / `ErrorBoundary` 始终跟随 `pages/` 扫描结果（见 [CHANGELOG](./CHANGELOG.md) 2.0.1）。
+export default function Users() {}
+```
 
----
+`meta` 会生成静态 `handle`。不要同时导出 `meta` 和运行时 `handle`，插件会将其视为冲突并阻止生成。
 
-## 手改 `routes.ts` 与 merge
+### Vue Router
 
-regen 时以 **RouteId**（`import('./pages/...')`）对齐路由块：
+支持 JSON、JSON5、YAML `<route>` 块：
 
-| 场景 | 行为 |
-|------|------|
-| 增删 `pages/` 文件 | 路由树结构跟随扫描结果 |
-| 同 RouteId 的字段与生成结果不一致 | **保留文件中的原文**（local-wins） |
-| layout 路由 | 头部配置可保留；`children` 跟随扫描 |
-| 页面文件重命名 | 视为新 RouteId，**不迁移**历史手改 |
-| `routes.ts` 无法解析 | 降级为全量重新生成 |
+```vue
+<route lang="yaml">
+path: account/:id
+name: account
+props: true
+meta:
+  requiresAuth: true
+</route>
+```
 
-可在单条路由上补充 `handle`、`meta`、调整 lazy 返回值等，无需担心保存页面时被覆盖。
+支持 `path`、`name`、`alias`、`props`、`meta`，布局文件同样生效。重复路由名、重复 URL 或无效配置会在生成阶段报错。
 
----
+## 手动修改 routes.ts
 
-## 定制方式
+生成文件是正式配置，不是只读产物。插件使用稳定 RouteId 和 baseline/current/fresh 三方 AST 合并：
 
-| 层次 | 入口 | 用途 |
-|------|------|------|
-| **结构** | `pages/` 命名与目录 | URL、嵌套、动态段 |
-| **字段** | 编辑 `routes.ts` | 单路由覆盖（merge 保留） |
-| **策略** | `vite.config` 插件选项 | 全局前缀、lazy/sync、批量变换 |
+- `pages/` 控制文件路由的新增、删除和层级。
+- 人工修改或删除的字段会保留。
+- 自定义 import、声明、注释、顶层路由和子路由会保留。
+- 未修改字段采用最新生成结果。
+- 文件重命名视为新 RouteId，不迁移旧配置。
+- `routes.ts` 语法损坏时拒绝覆盖，原文件保持不变。
+- 重复 `@file-route`、合并后的 import/声明冲突会拒绝写入，不会猜测路由归属。
+
+文件末尾的 `@vite-file-router-manifest` 是合并基线，只保存生成字段指纹，不参与运行时。请保留该注释。
+注释损坏或版本不匹配时会安全降级为无基线合并；此时现有字段仍保留，但无法识别此前手动删除的生成字段。
+
+## 配置
 
 ```ts
 fileRouter({
-  baseRoute: '/app',
+  framework: 'react',
+  pagesDir: 'src/pages',
+  outFile: 'src/routes.ts',
   importMode: 'lazy',
-  regenDebounceMs: 50,
+  baseRoute: '/app',
   exclude: ['**/_components/**'],
+  regenDebounceMs: 50,
   transformRoutes(root) {
-    // 扫描后、codegen 前：批量 meta、过滤、重排等
     return root
   },
 })
 ```
 
----
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `framework` | `'react'` | `'react'` 或 `'vue'` |
+| `pagesDir` | `'src/pages'` | 页面目录 |
+| `outFile` | `'src/routes.ts'` | ESM 输出；支持 `.ts`、`.js`、`.mjs` |
+| `extensions` | 按框架 | 扫描的页面扩展名 |
+| `importMode` | `'lazy'` | `'lazy'` 或 `'sync'` |
+| `baseRoute` | `''` | 路由前缀 |
+| `exclude` | `[]` | 相对 `pagesDir` 的 glob |
+| `transformRoutes` | - | 生成前调整路由树 |
+| `regenDebounceMs` | `50` | 文件监听防抖毫秒数 |
+| `logDiagnostics` | `true` | 输出诊断 |
+| `failOnRouteError` | `true` | 有错误时阻止写入 |
 
-## 配置参考
+`.cjs` 不是有效的客户端路由输出；Vite 配置文件仍可使用 CommonJS。
 
-| 选项 | 类型 | 默认 | 说明 |
-|------|------|------|------|
-| `pagesDir` | `string` | `'src/pages'` | 页面根目录 |
-| `outFile` | `string` | `'src/routes.ts'` | 输出路径；`.js` / `.mjs` / `.cjs` 生成纯 JS（无 `export type`） |
-| `outputLanguage` | `'ts' \| 'js'` | 由 `outFile` 推断 | 强制生成 TypeScript 或 JavaScript 语法 |
-| `framework` | `'react' \| 'vue'` | `'react'` | codegen 目标 |
-| `importMode` | `'lazy' \| 'sync'` | `'lazy'` | 默认加载策略 |
-| `baseRoute` | `string` | `''` | 全局路径前缀 |
-| `transformRoutes` | `function` | — | 扫描后路由树变换 |
-| `regenDebounceMs` | `number` | `50` | watch 防抖（ms） |
-| `exclude` | `string[]` | `[]` | 排除 glob |
-| `extensions` | `string[]` | 框架默认 | 扫描扩展名 |
+## 可靠性与性能
 
----
+- Babel AST 模块分析与 token 指纹，不依赖正则识别导出。
+- Vue 官方 SFC 编译器解析 `<route>`、`script`、`script setup`。
+- 同目录原子写入；解析失败和诊断错误不会覆盖现有配置。
+- 合并结果会再次执行完整语法校验；写入或原子替换失败时保留上一份有效文件。
+- 页面 stat/AST 缓存；不影响路由配置的组件修改不会重建 routes。
+- HMR 保留页面模块，只在路由配置变化时追加 routes 模块。
 
-## Router 版本
+本机基准（Darwin arm64、Node 22，`npm run bench`）：
 
-| 框架 | 最低版本 | 说明 |
-|------|----------|------|
-| React Router | **6.4+** | Data Router、`lazy` 路由对象；**`pages/loading` / `pages/error` 约定建议 7+** |
-| Vue Router | **4+** | 标准 `RouteRecordRaw` |
+| 框架 | 路由数 | 冷生成 | 无变化重跑 | 1% 手改+增删合并 |
+|------|-------:|-------:|-----------:|-----------------:|
+| React | 1,000 | 149 ms | 7 ms | 176 ms |
+| React | 10,000 | 1.07 s | 73 ms | 1.36 s |
+| Vue | 1,000 | 114 ms | 8 ms | 103 ms |
+| Vue | 10,000 | 1.10 s | 79 ms | 847 ms |
 
-生成文件内置 `FileRoute` 类型，不 import 路由库。挂载方式与 demo 一致：`routes as RouteObject[]` 或传入 `createRouter`。
+基准数据用于观察回归，不是不同机器上的性能承诺。
 
-`compat/` 对 react-router-dom **6.4 / 7.x**、vue-router **4 / 5** 做编译期检查（`pnpm test:compat`）。其中 `react-7/check-fallback.ts` 专门断言 `HydrateFallback` / `ErrorBoundary` 与 RR7 `RouteObject` 类型兼容。
-
----
-
-## 示例与验证
-
-```bash
-pnpm build
-pnpm demo:react     # http://localhost:5199
-pnpm demo:react-js  # http://localhost:5201
-pnpm demo:vue       # http://localhost:5200
-```
-
-[demo/README.md](./demo/README.md) — 约定覆盖、merge 手测流程、HMR。  
-E2E：`e2e/`（React / Vue 导航与 merge 热更新）。
-
----
-
-## 与相关方案
-
-| 方案 | 职责 |
-|------|------|
-| **本包** | 编译并同步可编辑的 `routes.ts` |
-| [unplugin-react-router-dom](../unplugin-react-router-dom) | 运行时 Router 集成与页面转场 |
-| [vite-plugin-pages](https://github.com/hannoeru/vite-plugin-pages) | 虚拟模块式文件路由 |
-
----
-
-## 从 1.x 迁移
-
-2.0 为架构重写，**不再提供**虚拟模块、动画运行时与自动 `RouterProvider` 注入。
-
-| 1.x | 2.0 |
-|-----|-----|
-| 虚拟路由模块 | `import routes from './routes'` |
-| 插件内 AnimatedOutlet / 转场 | 移除；转场由业务或 unplugin 承担 |
-| `vite-plugin-file-router/client` 类型辅助 | 使用生成文件内的 `FileRoute` |
-
-迁移步骤：
-
-1. 在 `vite.config` 启用 `fileRouter({ outFile: 'src/routes.ts' })`
-2. 在 `main` 中自行 `createBrowserRouter(routes)` 并渲染 `RouterProvider`
-3. 删除对虚拟路由 import 与 1.x client 类型的引用
-4. 运行 `vite dev` 生成 `routes.ts`，按需手改后提交
-
-运行时集成需求 → [unplugin-react-router-dom](../unplugin-react-router-dom)。完整变更见 [CHANGELOG](./CHANGELOG.md)。
-
----
-
-## 质量保障
-
-| 类型 | 覆盖 |
-|------|------|
-| 单元测试 130+ | 路径、codegen、merge、loading/error fallback、畸形降级、`transformRoutes`、压测 |
-| Router compat | 多版本 `routes.ts` 类型检查 |
-| E2E | demo 导航与 merge 热更新 |
+## 发布验证
 
 ```bash
-npx vitest run && pnpm test:compat && npx playwright test
+npm run verify
 ```
 
----
-
-## 其他
-
-- **Capacitor**：`main` 中选用 `createBrowserRouter` 或 `createHashRouter`
-- **英文文档**：[README.en.md](./README.en.md)
+依次执行单元测试、构建、React Router 7 / Vue Router 5 类型检查、Playwright E2E 和 npm 包检查。
 
 ## License
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.2 - 2026-07-21
+
+### Refactored
+
+- Replaced regex/lexer source inspection with Babel AST analysis and Vue's official SFC compiler.
+- Added stable route markers plus baseline/current/fresh AST merging. Manual field deletion, custom imports/statements/routes, comments, and exact source are preserved.
+- Generated TypeScript now uses official `RouteObject[]` / `RouteRecordRaw[]` constraints instead of a local `FileRoute` approximation.
+- Fixed dynamic directories, scoped nested catch-all paths, `baseRoute` with root layouts, sync export alias collisions, and nested fallback import collisions.
+- Added atomic writes, parse-failure overwrite protection, missing-default and ambiguous-convention build errors, and coalesced Vite HMR regeneration; scheduled diagnostics no longer escape the timer and terminate the dev process.
+- Added incremental stat/AST caching and generation signatures; component-only edits no longer rebuild or replace the page HMR module.
+- Vue layout route blocks now apply to layout records, nested route-group layouts emit valid empty paths, duplicate names are diagnosed, and `<route>` blocks are stripped automatically before SFC compilation.
+- Rootless Vue layouts now emit absolute top-level paths; duplicate/unknown/external `<route>` blocks and duplicate overridden paths are diagnosed before writing.
+- Adversarial merge protection now rejects duplicate route markers and invalid merged bindings, validates manifest structure, and preserves computed fields and trailing comments.
+- Added reproducible React/Vue benchmarks for 1,000 and 10,000 routes (`npm run bench`).
+- Support targets Vite 8.1+, React Router 7.18+, and Vue Router 5.2+ APIs only; historical Router compatibility projects were removed.
+
 ## 2.0.1 - 2026-06-24
 
 ### Fixed
@@ -30,7 +46,7 @@
 - Page exports: `meta`, `loader`, `action`, …; Vue `<route>` block (scan-time)
 - `transformRoutes` post-scan hook
 - `regenDebounceMs` + serialized regen
-- Malformed `routes.ts` → fallback to fresh output
+- Malformed `routes.ts` → fallback to fresh output (superseded by overwrite protection in 2.0.2)
 - Demo apps (`demo/react`, `demo/vue`) + Playwright e2e (merge hot-update)
 - `compat/` — type-check generated routes against react-router-dom 6.4 / 7.x, vue-router 4 / 5
 

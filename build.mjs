@@ -38,6 +38,7 @@ function pruneDist() {
 }
 
 const esbuild = resolveBin('esbuild', 'esbuild')
+const runtimeExternals = ['@babel/parser', '@vue/compiler-sfc', 'json5', 'yaml']
 
 cleanDist()
 
@@ -51,6 +52,7 @@ execFileSync(
     '--format=esm',
     '--external:node:*',
     '--external:vite',
+    ...runtimeExternals.map((dependency) => `--external:${dependency}`),
     `--outfile=${path.join(distDir, 'index.js')}`,
   ],
   { cwd: __dirname, stdio: 'inherit' },
@@ -66,6 +68,7 @@ execFileSync(
     '--format=cjs',
     '--external:node:*',
     '--external:vite',
+    ...runtimeExternals.map((dependency) => `--external:${dependency}`),
     '--banner:js=const __importMetaUrl=require("url").pathToFileURL(__filename).href;',
     '--define:import.meta.url=__importMetaUrl',
     `--outfile=${path.join(distDir, 'index.cjs')}`,

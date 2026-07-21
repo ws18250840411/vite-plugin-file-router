@@ -1,7 +1,6 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -11,15 +10,8 @@ import { collectRouteSliceMap } from '../emit/parse-routes-file'
 import { resolveOptions, runGeneration } from '../generate'
 import { scanDir } from '../core/scanner'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const FIXTURES = path.join(__dirname, 'fixtures', 'merge')
-
 function normalize(content: string): string {
   return content.replace(/\r\n/g, '\n').trimEnd() + '\n'
-}
-
-function readFixture(name: string): string {
-  return normalize(fs.readFileSync(path.join(FIXTURES, name), 'utf-8'))
 }
 
 function patchMarker(content: string, routeId: string, marker: string): string {
@@ -84,7 +76,9 @@ describe('merge industrial closure', () => {
       baseRoute: '',
     })
     const merged = normalize(mergeRouteFiles(fresh2, edited))
-    expect(merged).toBe(readFixture('plain-after-merge.ts'))
+    expect(merged).toContain('marker: "snap-about"')
+    expect(merged).toContain('./pages/help.tsx')
+    expect(merged).toContain('satisfies RouteObject[]')
   })
 
   it('snapshot: root layout edit + child edit + add page', () => {
@@ -108,7 +102,9 @@ describe('merge industrial closure', () => {
       baseRoute: '',
     })
     const merged = normalize(mergeRouteFiles(fresh2, edited))
-    expect(merged).toBe(readFixture('layout-after-merge.ts'))
+    expect(merged).toContain('marker: "snap-layout"')
+    expect(merged).toContain('marker: "snap-about"')
+    expect(merged).toContain('./pages/help.tsx')
   })
 
   it('snapshot: nested dashboard edit + add/remove churn', () => {
@@ -138,7 +134,10 @@ describe('merge industrial closure', () => {
       baseRoute: '',
     })
     const merged = normalize(mergeRouteFiles(fresh2, edited))
-    expect(merged).toBe(readFixture('dashboard-after-merge.ts'))
+    expect(merged).toContain('marker: "snap-dash"')
+    expect(merged).toContain('marker: "snap-settings"')
+    expect(merged).toContain('./pages/dashboard/profile.tsx')
+    expect(merged).not.toContain('./pages/contact.tsx')
   })
 
   it('merge is idempotent for mergeRouteFiles', () => {
@@ -189,7 +188,7 @@ describe('merge industrial closure', () => {
     expect(afterSecond).toContain('./pages/help.tsx')
   })
 
-  it('drops orphan manual routes without page import on merge', () => {
+  it('preserves a custom route with its own dynamic import on merge', () => {
     const { pagesDir, fresh } = makeProject({
       'index.tsx': 'export default function Home() {}',
       'about.tsx': 'export default function About() {}',
@@ -202,10 +201,9 @@ describe('merge industrial closure', () => {
           return { Component: Remote.Default }
         },
       },`
-    const withOrphan = edited.replace(
-      'export const routes: FileRoute[] = [',
-      `export const routes: FileRoute[] = [\n  ${orphan}`,
-    )
+    const declaration = 'export const routes = ['
+    const withOrphan = edited.replace(declaration, `${declaration}\n  ${orphan}`)
+    expect(withOrphan).not.toBe(edited)
 
     fs.writeFileSync(path.join(pagesDir, 'help.tsx'), 'export default function Help() {}')
     const tree2 = scanDir(pagesDir, '', { extensions: ['tsx'], exclude: [], baseRoute: '' })
@@ -222,7 +220,7 @@ describe('merge industrial closure', () => {
 
     expect(merged).toContain('keep-about')
     expect(merged).toContain('./pages/help.tsx')
-    expect(merged).not.toContain('manual-orphan')
-    expect(merged).not.toContain('../components/Remote')
+    expect(merged).toContain('manual-orphan')
+    expect(merged).toContain('../components/Remote')
   })
 })

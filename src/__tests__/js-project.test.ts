@@ -97,9 +97,9 @@ export default function Home() { return null }`,
     expect(merged).not.toContain('export type')
   })
 
-  it('infers js output for .mjs and .cjs outFile', () => {
+  it('infers .mjs and rejects CommonJS client route output', () => {
     expect(inferOutputLanguage('/app/routes.mjs')).toBe('js')
-    expect(inferOutputLanguage('/app/routes.cjs')).toBe('js')
+    expect(() => inferOutputLanguage('/app/routes.cjs')).toThrow(/ESM/)
   })
 
   it('outputLanguage option overrides .ts outFile extension', () => {

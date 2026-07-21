@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-file-router",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Vite plugin: scan pages/ to generate routes.ts or routes.js for React Router / Vue Router. TypeScript and JavaScript projects supported; hand-edits preserved on regen.",
   "keywords": [
     "vite",
@@ -12,6 +12,9 @@
     "spa"
   ],
   "license": "MIT",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -20,48 +23,66 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    },
-    "./client": {
-      "types": "./client.d.ts"
     }
   },
   "files": [
+    "bench",
     "dist",
-    "client.d.ts",
     "README.md",
     "README.en.md",
     "CHANGELOG.md"
   ],
   "scripts": {
     "build": "node build.mjs",
-    "pack:check": "npm pack --dry-run",
+    "bench": "npm run build && node --expose-gc bench/run.mjs",
+    "pack:check": "node scripts/check-package.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "fixtures:update": "cross-env UPDATE_MERGE_FIXTURES=1 vitest run src/__tests__/gen-merge-fixtures.test.ts",
     "test:e2e": "playwright test",
     "demo:react": "vite --config demo/react/vite.config.ts --port 5199 --strictPort",
     "demo:react-js": "vite --config demo/react-js/vite.config.js --port 5201 --strictPort",
     "demo:vue": "vite --config demo/vue/vite.config.ts --port 5200 --strictPort",
-    "test:compat": "node compat/run.mjs",
-    "verify": "pnpm test && pnpm build && pnpm test:compat && pnpm pack:check"
+    "demo:vue-rootless": "vite --config demo/vue-rootless/vite.config.ts --port 5202 --strictPort",
+    "test:compat": "node scripts/install-compat.mjs",
+    "verify": "npm test && npm run build && npm run test:compat && npm run test:e2e && npm run pack:check"
+  },
+  "dependencies": {
+    "@babel/parser": "7.29.7",
+    "@vue/compiler-sfc": "3.5.38",
+    "json5": "2.2.3",
+    "yaml": "2.9.0"
   },
   "peerDependencies": {
-    "vite": ">=5.0.0"
+    "react-router-dom": "^7.18.1",
+    "vite": "^8.1.5",
+    "vue-router": "^5.2.0"
+  },
+  "peerDependenciesMeta": {
+    "react-router-dom": {
+      "optional": true
+    },
+    "vue-router": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.4",
-    "@vitejs/plugin-react": "^6.0.2",
-    "@vitejs/plugin-vue": "^6.0.4",
-    "esbuild": "^0.27.7",
+    "@vitejs/plugin-react": "^6.0.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "cross-env": "^10.1.0",
+    "esbuild": "^0.28.1",
+    "fast-check": "^4.9.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.17.0",
+    "react-router-dom": "^7.18.1",
     "rollup": "^4.62.2",
     "rollup-plugin-dts": "^6.4.1",
     "typescript": "^6.0.3",
-    "vite": "^8.0.16",
+    "vite": "^8.1.5",
     "vitest": "^4.1.9",
     "vue": "^3.5.30",
-    "vue-router": "^5.0.4"
+    "vue-router": "^5.2.0"
   }
 }

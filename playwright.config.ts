@@ -17,10 +17,18 @@ export default defineConfig({
     },
     {
       name: 'vue',
-      testMatch: 'vue*.spec.ts',
+      testMatch: ['vue.spec.ts', 'vue-merge.spec.ts'],
       use: {
         ...devices['Desktop Chrome'],
         baseURL: 'http://localhost:5200',
+      },
+    },
+    {
+      name: 'vue-rootless',
+      testMatch: 'vue-rootless.spec.ts',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'http://localhost:5202',
       },
     },
   ],

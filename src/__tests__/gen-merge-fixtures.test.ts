@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { describe, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import { generateReactRoutes } from '../emit/codegen'
 import { mergeRouteFiles } from '../emit/merge-routes'
@@ -28,8 +28,18 @@ function patchMarker(content: string, routeId: string, marker: string): string {
   return content.slice(0, positioned) + block + content.slice(positioned + slice.length)
 }
 
-describe.skip('generate merge fixtures (run manually)', () => {
-  it('writes golden files', () => {
+function assertGolden(name: string, content: string): void {
+  const file = path.join(FIXTURES, name)
+  const normalized = normalize(content)
+  if (process.env.UPDATE_MERGE_FIXTURES === '1') {
+    fs.writeFileSync(file, normalized)
+    return
+  }
+  expect(normalize(fs.readFileSync(file, 'utf8'))).toBe(normalized)
+}
+
+describe('generated merge fixtures', () => {
+  it('matches golden files', () => {
     fs.mkdirSync(FIXTURES, { recursive: true })
 
     function makeProject(pages: Record<string, string>) {
@@ -75,10 +85,7 @@ describe.skip('generate merge fixtures (run manually)', () => {
       })
       const edited = patchMarker(fresh, './pages/about.tsx', 'snap-about')
       fs.writeFileSync(path.join(pagesDir, 'help.tsx'), 'export default function Help() {}')
-      fs.writeFileSync(
-        path.join(FIXTURES, 'plain-after-merge.ts'),
-        normalize(mergeRouteFiles(regen(pagesDir), edited)),
-      )
+      assertGolden('plain-after-merge.ts', mergeRouteFiles(regen(pagesDir), edited))
     }
 
     {
@@ -90,10 +97,7 @@ describe.skip('generate merge fixtures (run manually)', () => {
       let edited = patchMarker(fresh, './pages/_layout.tsx', 'snap-layout')
       edited = patchMarker(edited, './pages/about.tsx', 'snap-about')
       fs.writeFileSync(path.join(pagesDir, 'help.tsx'), 'export default function Help() {}')
-      fs.writeFileSync(
-        path.join(FIXTURES, 'layout-after-merge.ts'),
-        normalize(mergeRouteFiles(regen(pagesDir), edited)),
-      )
+      assertGolden('layout-after-merge.ts', mergeRouteFiles(regen(pagesDir), edited))
     }
 
     {
@@ -110,10 +114,7 @@ describe.skip('generate merge fixtures (run manually)', () => {
       edited = patchMarker(edited, './pages/dashboard/settings.tsx', 'snap-settings')
       fs.unlinkSync(path.join(pagesDir, 'contact.tsx'))
       fs.writeFileSync(path.join(pagesDir, 'dashboard', 'profile.tsx'), 'export default () => null')
-      fs.writeFileSync(
-        path.join(FIXTURES, 'dashboard-after-merge.ts'),
-        normalize(mergeRouteFiles(regen(pagesDir), edited)),
-      )
+      assertGolden('dashboard-after-merge.ts', mergeRouteFiles(regen(pagesDir), edited))
     }
   })
 })
