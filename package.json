@@ -13,7 +13,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": "^22.18.0 || >=24.11.0"
   },
   "type": "module",
   "main": "./dist/index.cjs",
@@ -48,10 +48,10 @@
     "verify": "npm test && npm run build && npm run test:compat && npm run test:e2e && npm run pack:check"
   },
   "dependencies": {
-    "@babel/parser": "7.29.7",
-    "@vue/compiler-sfc": "3.5.38",
-    "json5": "2.2.3",
-    "yaml": "2.9.0"
+    "@babel/parser": "^8.0.4",
+    "@vue/compiler-sfc": "^3.5.40",
+    "json5": "^2.2.3",
+    "yaml": "^2.9.0"
   },
   "peerDependencies": {
     "react-router-dom": "^7.18.1",
@@ -67,8 +67,8 @@
     }
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
-    "@types/node": "^25.9.4",
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
     "@vitejs/plugin-react": "^6.0.3",
     "@vitejs/plugin-vue": "^6.0.8",
     "cross-env": "^10.1.0",
@@ -82,8 +82,8 @@
     "source-map-js": "^1.2.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.5",
-    "vitest": "^4.1.9",
-    "vue": "^3.5.30",
+    "vitest": "^4.1.10",
+    "vue": "^3.5.40",
     "vue-router": "^5.2.0"
   }
 }
