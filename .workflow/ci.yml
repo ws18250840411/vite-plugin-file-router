@@ -29,7 +29,4 @@ stages:
         nodeVersion: 22.18.0
         commands:
           - npm ci --registry=https://registry.npmmirror.com
-          - npm test
-          - npm run build
-          - npm run test:compat
-          - npm run pack:check
+          - npm run validate
