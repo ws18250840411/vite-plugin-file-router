@@ -114,16 +114,23 @@ Generated client routes are ESM. Use `.ts`, `.js`, or `.mjs`; `.cjs` is rejected
 - Incremental file/AST caching and route-aware HMR.
 - Direct type validation against `RouteObject[]` / `RouteRecordRaw[]`.
 
-Representative Darwin arm64 / Node 22 benchmark (`npm run bench`):
+Representative Darwin arm64 / Node 24.6.0 benchmark (`npm run bench`):
 
 | Framework | Routes | Cold | No-op | 1% edit/churn merge |
 |-----------|-------:|-----:|------:|--------------------:|
-| React | 1,000 | 149 ms | 7 ms | 176 ms |
-| React | 10,000 | 1.07 s | 73 ms | 1.36 s |
-| Vue | 1,000 | 114 ms | 8 ms | 103 ms |
-| Vue | 10,000 | 1.10 s | 79 ms | 847 ms |
+| React | 1,000 | 156 ms | 9 ms | 213 ms |
+| React | 10,000 | 1.30 s | 78 ms | 1.39 s |
+| Vue | 1,000 | 118 ms | 8 ms | 108 ms |
+| Vue | 10,000 | 1.01 s | 76 ms | 1.05 s |
 
-Run the complete release gate with `npm run verify`.
+## Quality gates
+
+- **CI**: GitHub Actions on ubuntu / windows / macOS with Node 20.19, 22.12, and 24.x (unit tests, build, router compat, pack check); separate browser E2E job on all three OSes.
+- **Unit tests (160)**: real filesystem portability, AST property-based merge fuzz, cross-process output locks, adversarial merge, and industrial regressions.
+- **E2E (19)**: React / Vue demos plus merge hot-update; `demo/vue-rootless` covers rootless layouts and route groups in the browser.
+- **Release**: `v*` tags run `npm run verify`, verify tag/version alignment, then publish with npm provenance.
+
+Run the complete release gate with `npm run verify`. Use `npm run bench` locally for performance regression checks.
 
 ## License
 

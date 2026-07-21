@@ -14,6 +14,9 @@
 - Rootless Vue layouts now emit absolute top-level paths; duplicate/unknown/external `<route>` blocks and duplicate overridden paths are diagnosed before writing.
 - Adversarial merge protection now rejects duplicate route markers and invalid merged bindings, validates manifest structure, and preserves computed fields and trailing comments.
 - Added reproducible React/Vue benchmarks for 1,000 and 10,000 routes (`npm run bench`).
+- Added cross-platform CI (ubuntu / windows / macOS × Node 20.19 / 22.12 / 24.x), browser E2E on all three OSes, and npm provenance release workflow.
+- Added real filesystem portability tests, AST property-based merge fuzzing, cross-process output lock race tests, and rootless Vue Playwright E2E (`demo/vue-rootless`).
+- Added `pack:check` tarball governance and `npm run verify` as the single release gate (160 unit + 19 E2E tests, no default skipped cases).
 - Support targets Vite 8.1+, React Router 7.18+, and Vue Router 5.2+ APIs only; historical Router compatibility projects were removed.
 
 ## 2.0.1 - 2026-06-24

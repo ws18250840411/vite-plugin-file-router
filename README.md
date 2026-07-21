@@ -210,16 +210,23 @@ fileRouter({
 - 页面 stat/AST 缓存；不影响路由配置的组件修改不会重建 routes。
 - HMR 保留页面模块，只在路由配置变化时追加 routes 模块。
 
-本机基准（Darwin arm64、Node 22，`npm run bench`）：
+本机基准（Darwin arm64、Node 24.6.0，`npm run bench`）：
 
 | 框架 | 路由数 | 冷生成 | 无变化重跑 | 1% 手改+增删合并 |
 |------|-------:|-------:|-----------:|-----------------:|
-| React | 1,000 | 149 ms | 7 ms | 176 ms |
-| React | 10,000 | 1.07 s | 73 ms | 1.36 s |
-| Vue | 1,000 | 114 ms | 8 ms | 103 ms |
-| Vue | 10,000 | 1.10 s | 79 ms | 847 ms |
+| React | 1,000 | 156 ms | 9 ms | 213 ms |
+| React | 10,000 | 1.30 s | 78 ms | 1.39 s |
+| Vue | 1,000 | 118 ms | 8 ms | 108 ms |
+| Vue | 10,000 | 1.01 s | 76 ms | 1.05 s |
 
 基准数据用于观察回归，不是不同机器上的性能承诺。
+
+## 质量门禁
+
+- **CI**：GitHub Actions 在 ubuntu / windows / macOS 与 Node 20.19、22.12、24.x 上运行单元测试、构建、Router 类型检查与 npm 包检查；另开 Browser E2E job 在三平台跑 Playwright。
+- **单元测试（160）**：真实文件系统可移植性、AST property-based merge fuzz、跨进程输出锁竞争、对抗性 merge 与工业级回归。
+- **E2E（19）**：React / Vue demo 与 merge 热更新；`demo/vue-rootless` 覆盖无根 layout 与 route group 浏览器路径。
+- **发布**：打 `v*` tag 触发 `npm run verify`（单元测试 + 构建 + compat + E2E + `pack:check`），校验 tag 与 `package.json` 版本一致后以 npm provenance 发布。
 
 ## 发布验证
 
@@ -227,7 +234,7 @@ fileRouter({
 npm run verify
 ```
 
-依次执行单元测试、构建、React Router 7 / Vue Router 5 类型检查、Playwright E2E 和 npm 包检查。
+依次执行单元测试、构建、React Router 7 / Vue Router 5 类型检查、Playwright E2E 和 npm 包检查。本地还可运行 `npm run bench` 做性能回归观察。
 
 ## License
 
