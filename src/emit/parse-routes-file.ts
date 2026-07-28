@@ -17,7 +17,7 @@ function parseRoutesModule(content: string) {
     allowAwaitOutsideFunction: true,
     attachComment: true,
     tokens: true,
-    plugins: ['typescript', 'jsx', 'decorators-legacy', 'importAttributes', 'explicitResourceManagement'],
+    plugins: ['typescript', 'jsx', 'decorators-legacy'],
   }) as any
 }
 

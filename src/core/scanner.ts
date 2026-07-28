@@ -1,3 +1,4 @@
+import { ROUTE_MODULE_EXPORT_NAMES } from './constants'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -62,16 +63,6 @@ function matchExclude(relPath: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(normalized))
 }
 
-const ROUTE_MODULE_EXPORTS = [
-  'loader',
-  'action',
-  'ErrorBoundary',
-  'HydrateFallback',
-  'shouldRevalidate',
-  'handle',
-  'middleware',
-] as const
-
 type PageInfo = ReturnType<typeof analyzePageSource>
 
 const PAGE_INFO_CACHE_LIMIT = 50_000
@@ -95,7 +86,7 @@ function analyzePageSource(filePath: string, src: string) {
     const parsedModules = moduleSources.map((source) => parseModule(source, filePath))
     const runtimeExports = new Set(parsedModules.flatMap((parsed) => [...collectRuntimeExports(parsed)]))
     const moduleExports = Object.fromEntries(
-      ROUTE_MODULE_EXPORTS.filter((name) => runtimeExports.has(name)).map((name) => [name, true]),
+      ROUTE_MODULE_EXPORT_NAMES.filter((name) => runtimeExports.has(name)).map((name) => [name, true]),
     )
     const routeBlockRaw = routeResult.block
     const exportedMeta = parsedModules.reduce(

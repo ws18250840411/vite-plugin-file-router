@@ -19,8 +19,6 @@ export function parseModule(source: string, filePath = 'module.ts'): ParsedModul
         ...(isTypeScript ? (['typescript'] as const) : []),
         ...(isJsx ? (['jsx'] as const) : []),
         'decorators-legacy',
-        'importAttributes',
-        'explicitResourceManagement',
       ],
     }),
     source,

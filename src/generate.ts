@@ -3,7 +3,7 @@ import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 
 import { inferOutputLanguage } from './core/output-language'
-import { collectRouteDiagnostics, collectUrlPaths, scanDir } from './core/scanner'
+import { collectRouteDiagnostics, scanDir } from './core/scanner'
 import { normalizeBaseRoute } from './core/path-parser'
 import { generateReactRoutes, generateVueRoutes } from './emit/codegen'
 import { mergeRouteFiles } from './emit/merge-routes'
@@ -49,6 +49,10 @@ interface OutputLockRecord {
 }
 
 function sleepSync(milliseconds: number): void {
+  /* Blocks the event loop for up to `milliseconds`. Only called during brief
+     cross-process output lock contention (20 ms retry intervals); acceptable
+     in practice because the lock is held only for the duration of a single
+     atomic file rename. */
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
 }
 
@@ -253,7 +257,7 @@ export function runGeneration(
   const diagnostics = collectRouteDiagnostics(rootNode, resolved.framework)
   if (resolved.logDiagnostics) {
     for (const d of diagnostics) {
-      const fn = d.level === 'error' ? warn : warn
+      const fn = d.level === 'error' ? warn : log
       fn(`[vite-plugin-file-router] ${d.level}: ${d.message}\n  ${d.routes.join('\n  ')}`)
     }
   }

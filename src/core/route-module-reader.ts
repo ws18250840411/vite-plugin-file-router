@@ -1,15 +1,6 @@
 import { collectRuntimeExports, parseModule } from './module-ast'
+import { ROUTE_MODULE_EXPORT_NAMES } from './constants'
 import type { RouteModuleExports } from '../types'
-
-const MODULE_EXPORT_NAMES = [
-  'loader',
-  'action',
-  'ErrorBoundary',
-  'HydrateFallback',
-  'shouldRevalidate',
-  'handle',
-  'middleware',
-] as const
 
 /**
  * Detect React Router route module exports via static analysis.
@@ -19,7 +10,7 @@ export function readRouteModuleExports(source: string): RouteModuleExports | und
   const runtimeExports = collectRuntimeExports(parseModule(source))
   const exports: RouteModuleExports = {}
 
-  for (const name of MODULE_EXPORT_NAMES) {
+  for (const name of ROUTE_MODULE_EXPORT_NAMES) {
     if (runtimeExports.has(name)) exports[name] = true
   }
 
