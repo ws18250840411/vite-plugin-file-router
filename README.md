@@ -155,33 +155,21 @@ meta:
 
 ## 类型安全路由
 
-启用 `typedRoutes` 后，生成的 `routes.ts` 会包含一个 `RoutePaths` 联合类型：
+启用 `typedRoutes` 后，`routes.ts` 会额外导出 `RoutePaths` 联合类型，实现编译时路径校验：
 
 ```ts
-/** Auto-generated union of all route URL paths. Use for type-safe navigation. */
-export type RoutePaths = '/' | '/about' | '/user/:id' | '/dashboard/settings'
-
+// routes.ts（自动生成）
+export type RoutePaths = '/' | '/about' | '/user/:id'
 export const routes = [/* ... */]
-export default routes
 ```
-
-使用方式：
 
 ```tsx
 import type { RoutePaths } from './routes'
-
-// 编译时校验路由路径
-const path: RoutePaths = '/about'  // ✅
-const bad: RoutePaths = '/nonexistent'  // ❌ 类型错误
-
-// 配合 React Router
-import { Link } from 'react-router-dom'
-<Link to={'/about' satisfies RoutePaths}>About</Link>
+<Link to={'/about' satisfies RoutePaths}>About</Link>  // ✅ 路径合法
+<Link to={'/typo'  satisfies RoutePaths}>Typo</Link>  // ❌ 编译报错
 ```
 
-- 仅 TypeScript 输出（`.ts`）生效；`.js` / `.mjs` 输出会自动跳过。
-- catch-all 和 not-found 路由不纳入 `RoutePaths`。
-- 页面增删后重新生成会自动更新联合类型；合并系统保证已有手改不受影响。
+> 仅 `.ts` 输出生效；catch-all 路由不纳入。页面增删后自动更新。
 
 ## 手动修改 routes.ts
 
@@ -256,7 +244,7 @@ fileRouter({
 
 - **CI**：GitHub Actions 在 ubuntu / windows / macOS 与 **Node 24.11** 上运行单元测试、构建、Router 类型检查与 npm 包检查；另开 Browser E2E job 在三平台跑 Playwright；ubuntu 上运行 `npm run bench` 性能回归。（配置在 `.github/workflows/`，**仅适用于 GitHub**）
 - **Gitee Go**：`.workflow/ci.yml` 仅跑 `npm run validate`（单元测试 + 构建 + compat + `pack:check`）；**E2E 与 bench** 请本地 `npm run verify` / `npm run bench`，或由 GitHub Actions 承担。
-- **单元测试（160）**：真实文件系统可移植性、AST property-based merge fuzz、跨进程输出锁竞争、对抗性 merge 与工业级回归。
+- **单元测试（173）**：真实文件系统可移植性、AST property-based merge fuzz、跨进程输出锁竞争、对抗性 merge 与工业级回归。
 - **E2E（19）**：React / Vue demo 与 merge 热更新；`demo/vue-rootless` 覆盖无根 layout 与 route group 浏览器路径。
 - **发布**：打 `v*` tag 触发 `npm run verify`（单元测试 + 构建 + compat + E2E + `pack:check`），校验 tag 与 `package.json` 版本一致后以 npm provenance 发布。
 

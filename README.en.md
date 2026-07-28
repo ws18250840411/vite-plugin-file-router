@@ -130,7 +130,7 @@ Representative Darwin arm64 / Node 24.11+ benchmark (`npm run bench`):
 
 - **CI**: GitHub Actions on ubuntu / windows / macOS with **Node 24.11** (unit tests, build, router compat, pack check); separate browser E2E job on all three OSes; `npm run bench` on ubuntu. (`.github/workflows/` is **GitHub-only**.)
 - **Gitee Go**: `.workflow/ci.yml` runs validate only (unit tests, build, compat, `pack:check`). Run **E2E and bench** locally with `npm run verify` / `npm run bench`, or rely on GitHub Actions.
-- **Unit tests (160)**: real filesystem portability, AST property-based merge fuzz, cross-process output locks, adversarial merge, and industrial regressions.
+- **Unit tests (173)**: real filesystem portability, AST property-based merge fuzz, cross-process output locks, adversarial merge, and industrial regressions.
 - **E2E (19)**: React / Vue demos plus merge hot-update; `demo/vue-rootless` covers rootless layouts and route groups in the browser.
 - **Release**: `v*` tags run `npm run verify`, verify tag/version alignment, then publish with npm provenance.
 

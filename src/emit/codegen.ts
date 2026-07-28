@@ -270,7 +270,6 @@ function formatVueMeta(meta: RouteMeta | undefined, indent: string): string | un
   return formatMetaField('meta', meta, indent)
 }
 
-
 /**
  * Generate the `RoutePaths` union type section for type-safe navigation.
  * Returns an empty array when typed routes are disabled or JS output is used.
@@ -336,7 +335,6 @@ function reactSyncModuleFields(filePath: string, imports: Map<string, ImportRef>
 function reactCatchAllPath(): string {
   return '*'
 }
-
 
 interface LayoutRouteOptions {
   isRootLayout?: boolean
@@ -545,7 +543,6 @@ function emitReactLayoutRoute(
   return lines
 }
 
-
 /** Shared React leaf component emission (lazy + sync). */
 function emitReactLeafComponent(
   lines: string[],
@@ -687,8 +684,6 @@ function withFallbackPaths(root: RouteNode, ctx: GenerateContext): GenerateConte
     globalErrorPath: ctx.globalErrorPath ?? root.errorPath,
   }
 }
-
-
 
 interface FrameworkGeneratorConfig<State> {
   emitter: RouteEmitter<State>

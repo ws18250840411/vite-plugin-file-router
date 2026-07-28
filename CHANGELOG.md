@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.0.3 - 2026-07-28
+
+### Fixed
+
+- **Babel 8 type errors**: removed `importAttributes` and `explicitResourceManagement` parser plugin names (enabled by default in Babel 8; caused 7 `tsc` errors since `PluginConfig` type rejects them).
+- **Diagnostic logging**: `d.level === 'error' ? warn : warn` → `warn : log` so warnings use `console.log` and errors use `console.warn`.
+- Removed dead import `collectUrlPaths` from `generate.ts`.
+
+### Added
+
+- **`typedRoutes` option**: generates a `RoutePaths` union type in `routes.ts` for compile-time navigation validation. TypeScript output only; catch-all and not-found routes excluded. The three-way merge system correctly adds, updates, and removes the type through route churn and option toggling. (13 new tests)
+
+### Changed
+
+- Extracted `ROUTE_MODULE_EXPORT_NAMES` to `src/core/constants.ts` (was duplicated in scanner, codegen, and route-module-reader).
+- Extracted shared `formatMetaField()` to eliminate React/Vue meta serialization duplication.
+- Refactored codegen: shared `collectRoutes<State>`, `collectNestedRouteLines<State>`, `emitDirectoryRoute<State>` via `RouteEmitter<State>` callback interface (replaces 6 framework-specific functions).
+- Refactored codegen: shared `assembleRoutesFile<State>()` for React/Vue route file assembly; shared `emitReactLeafComponent`/`emitVueLeafComponent` and meta helpers (eliminates 4 duplicated component/meta blocks).
+- `generationSignature` now includes `typedRoutes` so toggling the option triggers regeneration.
+- `parse-routes-file.ts` classifies `RoutePaths` as a generated type for merge correctness.
+- Added `sleepSync` blocking-behavior comment and `solePage` flattening documentation.
+
+**Tests**: 160 → 173 (all passing). `tsc --noEmit`: 7 errors → 0. Generated output: byte-identical.
+
 ## 2.0.2 - 2026-07-21
 
 ### Refactored
