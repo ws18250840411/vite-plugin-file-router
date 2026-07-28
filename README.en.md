@@ -100,10 +100,13 @@ fileRouter({
   baseRoute: '/app',
   exclude: ['**/_components/**'],
   transformRoutes(root) { return root },
+  typedRoutes: true,
 })
 ```
 
 Generated client routes are ESM. Use `.ts`, `.js`, or `.mjs`; `.cjs` is rejected. CommonJS Vite configs remain supported.
+
+`typedRoutes: true` emits a `RoutePaths` union type in the routes file for compile-time path validation. TS output only.
 
 ## Reliability and Performance
 

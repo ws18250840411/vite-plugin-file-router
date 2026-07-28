@@ -105,7 +105,7 @@ function topLevelStatementKind(statement: any, routesDeclaration: any): TopLevel
   const declaration = statement.type === 'ExportNamedDeclaration' ? statement.declaration : statement
   if (
     (declaration?.type === 'TSTypeAliasDeclaration' || declaration?.type === 'TSInterfaceDeclaration')
-    && (declaration.id?.name === 'FileRoute' || declaration.id?.name === 'RouteMeta')
+    && (declaration.id?.name === 'FileRoute' || declaration.id?.name === 'RouteMeta' || declaration.id?.name === 'RoutePaths')
   ) return 'legacy-generated-type'
   return 'custom'
 }

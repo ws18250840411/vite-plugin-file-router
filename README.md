@@ -153,6 +153,36 @@ meta:
 
 支持 `path`、`name`、`alias`、`props`、`meta`，布局文件同样生效。重复路由名、重复 URL 或无效配置会在生成阶段报错。
 
+## 类型安全路由
+
+启用 `typedRoutes` 后，生成的 `routes.ts` 会包含一个 `RoutePaths` 联合类型：
+
+```ts
+/** Auto-generated union of all route URL paths. Use for type-safe navigation. */
+export type RoutePaths = '/' | '/about' | '/user/:id' | '/dashboard/settings'
+
+export const routes = [/* ... */]
+export default routes
+```
+
+使用方式：
+
+```tsx
+import type { RoutePaths } from './routes'
+
+// 编译时校验路由路径
+const path: RoutePaths = '/about'  // ✅
+const bad: RoutePaths = '/nonexistent'  // ❌ 类型错误
+
+// 配合 React Router
+import { Link } from 'react-router-dom'
+<Link to={'/about' satisfies RoutePaths}>About</Link>
+```
+
+- 仅 TypeScript 输出（`.ts`）生效；`.js` / `.mjs` 输出会自动跳过。
+- catch-all 和 not-found 路由不纳入 `RoutePaths`。
+- 页面增删后重新生成会自动更新联合类型；合并系统保证已有手改不受影响。
+
 ## 手动修改 routes.ts
 
 生成文件是正式配置，不是只读产物。插件使用稳定 RouteId 和 baseline/current/fresh 三方 AST 合并：
@@ -198,6 +228,7 @@ fileRouter({
 | `regenDebounceMs` | `50` | 文件监听防抖毫秒数 |
 | `logDiagnostics` | `true` | 输出诊断 |
 | `failOnRouteError` | `true` | 有错误时阻止写入 |
+| `typedRoutes` | `false` | 生成 `RoutePaths` 联合类型，用于类型安全导航；仅 `.ts` 输出生效 |
 
 `.cjs` 不是有效的客户端路由输出；Vite 配置文件仍可使用 CommonJS。
 

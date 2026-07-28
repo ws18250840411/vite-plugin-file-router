@@ -147,6 +147,13 @@ export interface FileRouterOptions {
   logDiagnostics?: boolean
   /** Stop generation when route diagnostics contain errors. @default true */
   failOnRouteError?: boolean
+  /**
+   * Generate a `RoutePaths` union type in the routes file for type-safe
+   * navigation (e.g. `<Link to={'/about' satisfies RoutePaths}>`).
+   * Only applies to TypeScript output (`.ts` outFile); ignored for `.js`/`.mjs`.
+   * @default false
+   */
+  typedRoutes?: boolean
 }
 
 export interface GenerateContext {
@@ -162,4 +169,6 @@ export interface GenerateContext {
   globalLoadingPath?: string | null
   /** Absolute path to pages/error.* when present at the scan root. */
   globalErrorPath?: string | null
+  /** Whether to emit a `RoutePaths` union type. @default false */
+  typedRoutes?: boolean
 }

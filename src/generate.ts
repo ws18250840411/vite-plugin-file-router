@@ -35,6 +35,7 @@ export interface ResolvedOptions {
   transformRoutes?: FileRouterOptions['transformRoutes']
   logDiagnostics: boolean
   failOnRouteError: boolean
+  typedRoutes: boolean
 }
 
 const generationSignatures = new Map<string, string>()
@@ -145,6 +146,7 @@ function generationSignature(resolved: ResolvedOptions, rootNode: RouteNode): st
     importMode: resolved.importMode,
     baseRoute: resolved.baseRoute,
     outputLanguage: resolved.outputLanguage,
+    typedRoutes: resolved.typedRoutes,
     pagesDir: resolved.pagesDir,
     outFile: resolved.outFile,
     rootNode,
@@ -177,6 +179,7 @@ export function resolveOptions(root: string, options: FileRouterOptions = {}): R
     transformRoutes: options.transformRoutes,
     logDiagnostics: options.logDiagnostics ?? true,
     failOnRouteError: options.failOnRouteError ?? true,
+    typedRoutes: options.typedRoutes ?? false,
   }
 }
 
@@ -209,6 +212,7 @@ export function generateRouteFiles(resolved: ResolvedOptions, rootNode: RouteNod
     outputLanguage: resolved.outputLanguage,
     globalLoadingPath: rootNode.loadingPath,
     globalErrorPath: rootNode.errorPath,
+    typedRoutes: resolved.typedRoutes,
   }
 
   const rawContent = resolved.framework === 'vue'
