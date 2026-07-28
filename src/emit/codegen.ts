@@ -337,34 +337,138 @@ function reactCatchAllPath(): string {
   return '*'
 }
 
-function collectReactRoutes(
+
+interface LayoutRouteOptions {
+  isRootLayout?: boolean
+  isTopLevel?: boolean
+}
+
+interface RouteEmitter<State> {
+  layoutRoute: (
+    node: RouteNode,
+    ctx: GenerateContext,
+    imports: Map<string, ImportRef>,
+    usedNames: Set<string>,
+    indent: string,
+    state: State,
+    options?: LayoutRouteOptions,
+  ) => string[]
+  absoluteLeaf: (
+    node: RouteNode,
+    ctx: GenerateContext,
+    imports: Map<string, ImportRef>,
+    usedNames: Set<string>,
+    indent: string,
+    state: State,
+  ) => string[]
+  nestedLeaf: (
+    node: RouteNode,
+    ctx: GenerateContext,
+    imports: Map<string, ImportRef>,
+    usedNames: Set<string>,
+    indent: string,
+    state: State,
+  ) => string[]
+}
+
+/** Top-level route collection: flattens directories, emits absolute leaves. */
+function collectRoutes<State>(
   node: RouteNode,
   ctx: GenerateContext,
   imports: Map<string, ImportRef>,
   usedNames: Set<string>,
   indent: string,
   lines: string[],
+  state: State,
+  fns: RouteEmitter<State>,
 ): void {
   if (node.layoutPath) {
-    lines.push(...emitReactLayoutRoute(node, ctx, imports, usedNames, indent, true))
+    lines.push(...fns.layoutRoute(node, ctx, imports, usedNames, indent, state, { isRootLayout: true, isTopLevel: true }))
     return
   }
-
   for (const child of node.children) {
     if (child.isGroup) {
       if (child.layoutPath) {
-        lines.push(...emitReactLayoutRoute(child, ctx, imports, usedNames, indent))
+        lines.push(...fns.layoutRoute(child, ctx, imports, usedNames, indent, state, { isTopLevel: true }))
       } else {
-        collectReactRoutes(child, ctx, imports, usedNames, indent, lines)
+        collectRoutes(child, ctx, imports, usedNames, indent, lines, state, fns)
       }
     } else if (child.layoutPath) {
-      lines.push(...emitReactLayoutRoute(child, ctx, imports, usedNames, indent))
+      lines.push(...fns.layoutRoute(child, ctx, imports, usedNames, indent, state, { isTopLevel: true }))
     } else if (child.filePath) {
-      lines.push(...emitReactAbsoluteLeaf(child, ctx, imports, usedNames, indent))
+      lines.push(...fns.absoluteLeaf(child, ctx, imports, usedNames, indent, state))
     } else if (child.children.length > 0) {
-      collectReactRoutes(child, ctx, imports, usedNames, indent, lines)
+      collectRoutes(child, ctx, imports, usedNames, indent, lines, state, fns)
     }
   }
+}
+
+/** Nested route collection (inside a layout): wraps directories, emits nested leaves. */
+function collectNestedRouteLines<State>(
+  children: RouteNode[],
+  ctx: GenerateContext,
+  imports: Map<string, ImportRef>,
+  usedNames: Set<string>,
+  indent: string,
+  state: State,
+  fns: RouteEmitter<State>,
+): string[] {
+  const nested: string[] = []
+  for (const child of children) {
+    if (child.isGroup) {
+      if (child.layoutPath) {
+        nested.push(...fns.layoutRoute(child, ctx, imports, usedNames, indent, state))
+      } else {
+        nested.push(...collectNestedRouteLines(child.children, ctx, imports, usedNames, indent, state, fns))
+      }
+    } else if (child.filePath) {
+      nested.push(...fns.nestedLeaf(child, ctx, imports, usedNames, indent, state))
+    } else if (child.layoutPath) {
+      nested.push(...fns.layoutRoute(child, ctx, imports, usedNames, indent, state))
+    } else if (child.children.length) {
+      nested.push(...emitDirectoryRoute(child, ctx, imports, usedNames, indent, state, fns))
+    }
+  }
+  return nested
+}
+
+/** Directory route with solePage flattening optimization (shared by React/Vue). */
+function emitDirectoryRoute<State>(
+  node: RouteNode,
+  ctx: GenerateContext,
+  imports: Map<string, ImportRef>,
+  usedNames: Set<string>,
+  indent: string,
+  state: State,
+  fns: RouteEmitter<State>,
+): string[] {
+  if (!node.path || !node.children.length) return []
+
+  // Flatten a directory that contains only a single non-index page (no layout)
+  // into one leaf route with a combined path, e.g. `blog/post` instead of
+  // `{ path: 'blog', children: [{ path: 'post' }] }`. Functionally equivalent
+  // but reduces nesting in the generated routes file.
+  const solePage = node.children.length === 1 && node.children[0].filePath
+    ? node.children[0]
+    : null
+  if (solePage && solePage.path && !solePage.layoutPath) {
+    return fns.nestedLeaf({ ...solePage, path: `${node.path}/${solePage.path}` }, ctx, imports, usedNames, indent, state)
+  }
+
+  const lines: string[] = []
+  const childIndent = indent + '  '
+  lines.push(routeMarker(node.routeId, indent))
+  lines.push(`${indent}{`)
+  lines.push(`${childIndent}path: ${JSON.stringify(node.path)},`)
+
+  const nested = collectNestedRouteLines(node.children, ctx, imports, usedNames, childIndent, state, fns)
+  if (nested.length) {
+    lines.push(`${childIndent}children: [`)
+    lines.push(...indentBlock(nested))
+    lines.push(`${childIndent}],`)
+  }
+  lines.push(`${indent}},`)
+  return lines
 }
 
 function emitReactLayoutRoute(
@@ -373,8 +477,9 @@ function emitReactLayoutRoute(
   imports: Map<string, ImportRef>,
   usedNames: Set<string>,
   indent: string,
-  isRootLayout = false,
+  options: LayoutRouteOptions = {},
 ): string[] {
+  const isRootLayout = options.isRootLayout ?? false
   const lines: string[] = []
   const childIndent = indent + '  '
   const isLazy = (node.layoutImportOverride ?? ctx.importMode) === 'lazy'
@@ -430,7 +535,7 @@ function emitReactLayoutRoute(
   const handle = formatReactHandle(node.meta, childIndent)
   if (handle) lines.push(handle)
 
-  const nested = collectReactNestedRouteLines(node.children, ctx, imports, usedNames, childIndent)
+  const nested = collectNestedRouteLines(node.children, ctx, imports, usedNames, childIndent, undefined, reactEmitter)
   if (nested.length) {
     lines.push(`${childIndent}children: [`)
     lines.push(...indentBlock(nested))
@@ -438,78 +543,6 @@ function emitReactLayoutRoute(
   }
   lines.push(`${indent}},`)
   return lines
-}
-
-function emitReactDirectoryRoute(
-  node: RouteNode,
-  ctx: GenerateContext,
-  imports: Map<string, ImportRef>,
-  usedNames: Set<string>,
-  indent: string,
-): string[] {
-  if (!node.path || !node.children.length) return []
-
-  // Flatten a directory that contains only a single non-index page (no layout)
-  // into one leaf route with a combined path, e.g. `blog/post` instead of
-  // `{ path: 'blog', children: [{ path: 'post' }] }`. Functionally equivalent
-  // but reduces nesting in the generated routes file.
-  const solePage = node.children.length === 1 && node.children[0].filePath
-    ? node.children[0]
-    : null
-  if (solePage?.path && !solePage.layoutPath) {
-    return emitReactNestedLeaf({ ...solePage, path: `${node.path}/${solePage.path}` }, ctx, imports, usedNames, indent)
-  }
-
-  const lines: string[] = []
-  const childIndent = indent + '  '
-  lines.push(routeMarker(node.routeId, indent))
-  lines.push(`${indent}{`)
-  lines.push(`${childIndent}path: ${JSON.stringify(node.path)},`)
-
-  const nested = collectReactNestedRouteLines(node.children, ctx, imports, usedNames, childIndent)
-  if (nested.length) {
-    lines.push(`${childIndent}children: [`)
-    lines.push(...indentBlock(nested))
-    lines.push(`${childIndent}],`)
-  }
-  lines.push(`${indent}},`)
-  return lines
-}
-
-function collectReactNestedRouteLines(
-  children: RouteNode[],
-  ctx: GenerateContext,
-  imports: Map<string, ImportRef>,
-  usedNames: Set<string>,
-  indent: string,
-): string[] {
-  const nested: string[] = []
-  for (const child of children) {
-    if (child.isGroup) {
-      if (child.layoutPath) {
-        nested.push(...emitReactLayoutRoute(child, ctx, imports, usedNames, indent))
-      } else {
-        nested.push(...collectReactNestedRouteLines(child.children, ctx, imports, usedNames, indent))
-      }
-    } else if (child.filePath) {
-      nested.push(...emitReactNestedLeaf(child, ctx, imports, usedNames, indent))
-    } else if (child.layoutPath) {
-      nested.push(...emitReactLayoutRoute(child, ctx, imports, usedNames, indent))
-    } else if (child.children.length) {
-      nested.push(...emitReactDirectoryRoute(child, ctx, imports, usedNames, indent))
-    }
-  }
-  return nested
-}
-
-function emitReactNestedLeaf(
-  node: RouteNode,
-  ctx: GenerateContext,
-  imports: Map<string, ImportRef>,
-  usedNames: Set<string>,
-  indent: string,
-): string[] {
-  return emitReactLeaf(node, ctx, imports, usedNames, indent)
 }
 
 function emitReactAbsoluteLeaf(
@@ -614,12 +647,31 @@ function withFallbackPaths(root: RouteNode, ctx: GenerateContext): GenerateConte
   }
 }
 
+
+const reactEmitter: RouteEmitter<void> = {
+  layoutRoute: (node, ctx, imports, usedNames, indent, _state, options) =>
+    emitReactLayoutRoute(node, ctx, imports, usedNames, indent, options),
+  absoluteLeaf: (node, ctx, imports, usedNames, indent, _state) =>
+    emitReactAbsoluteLeaf(node, ctx, imports, usedNames, indent),
+  nestedLeaf: (node, ctx, imports, usedNames, indent, _state) =>
+    emitReactLeaf(node, ctx, imports, usedNames, indent),
+}
+
+const vueEmitter: RouteEmitter<{ usesDefineAsyncComponent: boolean }> = {
+  layoutRoute: (node, ctx, imports, usedNames, indent, state, options) =>
+    emitVueLayoutRoute(node, ctx, imports, usedNames, indent, state, options),
+  absoluteLeaf: (node, ctx, imports, usedNames, indent, state) =>
+    emitVueAbsoluteLeaf(node, ctx, imports, usedNames, indent, state),
+  nestedLeaf: (node, ctx, imports, usedNames, indent, state) =>
+    emitVueNestedLeaf(node, ctx, imports, usedNames, indent, state),
+}
+
 export function generateReactRoutes(root: RouteNode, ctx: GenerateContext): string {
   const resolved = withFallbackPaths(root, ctx)
   const imports = new Map<string, ImportRef>()
   const usedNames = new Set<string>()
   const routeLines: string[] = []
-  collectReactRoutes(root, resolved, imports, usedNames, '  ', routeLines)
+  collectRoutes(root, resolved, imports, usedNames, '  ', routeLines, undefined, reactEmitter)
   let finalLines = prettifyRouteBlocks(routeLines)
   if (resolved.baseRoute && !root.layoutPath) {
     finalLines = wrapBaseRoute(finalLines, resolved.baseRoute, '  ')
@@ -687,105 +739,6 @@ function vueAbsolutePath(node: RouteNode): string {
   return node.urlPath.startsWith('/') ? node.urlPath : `/${node.urlPath}`
 }
 
-function collectVueRoutes(
-  node: RouteNode,
-  ctx: GenerateContext,
-  imports: Map<string, ImportRef>,
-  usedNames: Set<string>,
-  indent: string,
-  lines: string[],
-  state: { usesDefineAsyncComponent: boolean },
-): void {
-  if (node.layoutPath) {
-    lines.push(...emitVueLayoutRoute(node, ctx, imports, usedNames, indent, state, {
-      isRootLayout: true,
-      isTopLevel: true,
-    }))
-    return
-  }
-
-  for (const child of node.children) {
-    if (child.isGroup) {
-      if (child.layoutPath) {
-        lines.push(...emitVueLayoutRoute(child, ctx, imports, usedNames, indent, state, { isTopLevel: true }))
-      } else {
-        collectVueRoutes(child, ctx, imports, usedNames, indent, lines, state)
-      }
-    } else if (child.layoutPath) {
-      lines.push(...emitVueLayoutRoute(child, ctx, imports, usedNames, indent, state, { isTopLevel: true }))
-    } else if (child.filePath) {
-      lines.push(...emitVueAbsoluteLeaf(child, ctx, imports, usedNames, indent, state))
-    } else if (child.children.length > 0) {
-      collectVueRoutes(child, ctx, imports, usedNames, indent, lines, state)
-    }
-  }
-}
-
-function emitVueDirectoryRoute(
-  node: RouteNode,
-  ctx: GenerateContext,
-  imports: Map<string, ImportRef>,
-  usedNames: Set<string>,
-  indent: string,
-  state: { usesDefineAsyncComponent: boolean },
-): string[] {
-  if (!node.path || !node.children.length) return []
-
-  // Flatten a directory that contains only a single non-index page (no layout)
-  // into one leaf route with a combined path, e.g. `blog/post` instead of
-  // `{ path: 'blog', children: [{ path: 'post' }] }`. Functionally equivalent
-  // but reduces nesting in the generated routes file.
-  const solePage = node.children.length === 1 && node.children[0].filePath
-    ? node.children[0]
-    : null
-  if (solePage && solePage.path && !solePage.layoutPath) {
-    const combined = `${node.path}/${solePage.path}`
-    return emitVueNestedLeaf({ ...solePage, path: combined }, ctx, imports, usedNames, indent, state)
-  }
-
-  const lines: string[] = []
-  const childIndent = indent + '  '
-  lines.push(routeMarker(node.routeId, indent))
-  lines.push(`${indent}{`)
-  lines.push(`${childIndent}path: ${JSON.stringify(node.path)},`)
-
-  const nested = collectVueNestedRouteLines(node.children, ctx, imports, usedNames, childIndent, state)
-  if (nested.length) {
-    lines.push(`${childIndent}children: [`)
-    lines.push(...indentBlock(nested))
-    lines.push(`${childIndent}],`)
-  }
-  lines.push(`${indent}},`)
-  return lines
-}
-
-function collectVueNestedRouteLines(
-  children: RouteNode[],
-  ctx: GenerateContext,
-  imports: Map<string, ImportRef>,
-  usedNames: Set<string>,
-  indent: string,
-  state: { usesDefineAsyncComponent: boolean },
-): string[] {
-  const nested: string[] = []
-  for (const child of children) {
-    if (child.isGroup) {
-      if (child.layoutPath) {
-        nested.push(...emitVueLayoutRoute(child, ctx, imports, usedNames, indent, state))
-      } else {
-        nested.push(...collectVueNestedRouteLines(child.children, ctx, imports, usedNames, indent, state))
-      }
-    } else if (child.filePath) {
-      nested.push(...emitVueNestedLeaf(child, ctx, imports, usedNames, indent, state))
-    } else if (child.layoutPath) {
-      nested.push(...emitVueLayoutRoute(child, ctx, imports, usedNames, indent, state))
-    } else if (child.children.length) {
-      nested.push(...emitVueDirectoryRoute(child, ctx, imports, usedNames, indent, state))
-    }
-  }
-  return nested
-}
-
 function emitVueLayoutRoute(
   node: RouteNode,
   ctx: GenerateContext,
@@ -834,7 +787,7 @@ function emitVueLayoutRoute(
   const meta = formatVueMeta(node.meta, childIndent)
   if (meta) lines.push(meta)
 
-  const nested = collectVueNestedRouteLines(node.children, ctx, imports, usedNames, childIndent, state)
+  const nested = collectNestedRouteLines(node.children, ctx, imports, usedNames, childIndent, state, vueEmitter)
   if (nested.length) {
     lines.push(`${childIndent}children: [`)
     lines.push(...indentBlock(nested))
@@ -934,7 +887,7 @@ export function generateVueRoutes(root: RouteNode, ctx: GenerateContext): string
   const usedNames = new Set<string>()
   const routeLines: string[] = []
   const state = { usesDefineAsyncComponent: false }
-  collectVueRoutes(root, resolved, imports, usedNames, '  ', routeLines, state)
+  collectRoutes(root, resolved, imports, usedNames, '  ', routeLines, state, vueEmitter)
   let finalLines = prettifyRouteBlocks(routeLines)
   if (resolved.baseRoute && !root.layoutPath) {
     finalLines = wrapBaseRoute(finalLines, resolved.baseRoute, '  ')
