@@ -545,6 +545,65 @@ function emitReactLayoutRoute(
   return lines
 }
 
+
+/** Shared React leaf component emission (lazy + sync). */
+function emitReactLeafComponent(
+  lines: string[],
+  childIndent: string,
+  node: RouteNode,
+  imports: Map<string, ImportRef>,
+  usedNames: Set<string>,
+  importPath: string,
+  isLazy: boolean,
+): void {
+  if (isLazy) {
+    pushReactLazy(lines, childIndent, importPath, reactEffectiveModuleExports(node.moduleExports, node.meta))
+  } else {
+    const moduleExports = reactEffectiveModuleExports(node.moduleExports, node.meta)
+    const id = reactSyncNamedImports(node.filePath!, moduleExports, imports, usedNames)
+    lines.push(`${childIndent}Component: ${id},`)
+    lines.push(...reactSyncModuleFields(node.filePath!, imports, childIndent))
+  }
+}
+
+/** Shared React leaf meta emission. */
+function emitReactLeafMeta(lines: string[], node: RouteNode, childIndent: string): void {
+  const handle = formatReactHandle(node.meta, childIndent)
+  if (handle) lines.push(handle)
+}
+
+/** Shared Vue leaf component emission (lazy + sync). */
+function emitVueLeafComponent(
+  lines: string[],
+  childIndent: string,
+  node: RouteNode,
+  ctx: GenerateContext,
+  imports: Map<string, ImportRef>,
+  usedNames: Set<string>,
+  importPath: string,
+  isLazy: boolean,
+  state: { usesDefineAsyncComponent: boolean },
+): void {
+  if (isLazy) {
+    const component = vueComponentBody(
+      importPath,
+      vueAsyncExtras(ctx, imports, usedNames, node.loadingPath, node.errorPath),
+    )
+    if (component.usesDefineAsyncComponent) state.usesDefineAsyncComponent = true
+    pushMultilineField(lines, childIndent, 'component', component.lines)
+  } else {
+    const id = allocImport(node.filePath!, false, imports, usedNames)
+    lines.push(`${childIndent}component: ${id},`)
+  }
+}
+
+/** Shared Vue leaf meta + route-block emission. */
+function emitVueLeafMeta(lines: string[], node: RouteNode, childIndent: string): void {
+  lines.push(...emitVueRouteBlockFields(node, childIndent))
+  const meta = formatVueMeta(node.meta, childIndent)
+  if (meta) lines.push(meta)
+}
+
 function emitReactAbsoluteLeaf(
   node: RouteNode,
   ctx: GenerateContext,
@@ -568,17 +627,8 @@ function emitReactAbsoluteLeaf(
     lines.push(`${childIndent}path: ${JSON.stringify(node.urlPath === '/' ? '/' : node.urlPath)},`)
   }
 
-  if (isLazy) {
-    pushReactLazy(lines, childIndent, importPath, reactEffectiveModuleExports(node.moduleExports, node.meta))
-  } else {
-    const moduleExports = reactEffectiveModuleExports(node.moduleExports, node.meta)
-    const id = reactSyncNamedImports(node.filePath, moduleExports, imports, usedNames)
-    lines.push(`${childIndent}Component: ${id},`)
-    lines.push(...reactSyncModuleFields(node.filePath, imports, childIndent))
-  }
-
-  const handle = formatReactHandle(node.meta, childIndent)
-  if (handle) lines.push(handle)
+  emitReactLeafComponent(lines, childIndent, node, imports, usedNames, importPath, isLazy)
+  emitReactLeafMeta(lines, node, childIndent)
   lines.push(`${indent}},`)
   return lines
 }
@@ -609,17 +659,8 @@ function emitReactLeaf(
     lines.push(`${childIndent}index: true,`)
   }
 
-  if (isLazy) {
-    pushReactLazy(lines, childIndent, importPath, reactEffectiveModuleExports(node.moduleExports, node.meta))
-  } else {
-    const moduleExports = reactEffectiveModuleExports(node.moduleExports, node.meta)
-    const id = reactSyncNamedImports(node.filePath, moduleExports, imports, usedNames)
-    lines.push(`${childIndent}Component: ${id},`)
-    lines.push(...reactSyncModuleFields(node.filePath, imports, childIndent))
-  }
-
-  const handle = formatReactHandle(node.meta, childIndent)
-  if (handle) lines.push(handle)
+  emitReactLeafComponent(lines, childIndent, node, imports, usedNames, importPath, isLazy)
+  emitReactLeafMeta(lines, node, childIndent)
 
   lines.push(`${indent}},`)
   return lines
@@ -648,6 +689,55 @@ function withFallbackPaths(root: RouteNode, ctx: GenerateContext): GenerateConte
 }
 
 
+
+interface FrameworkGeneratorConfig<State> {
+  emitter: RouteEmitter<State>
+  initialState: State
+  /** Returns null to skip this import (e.g. lazy imports in React). */
+  formatImport: (ref: ImportRef, outFile: string) => string | null
+  typeImport: string | null
+  runtimeImports: (state: State) => string[]
+  framework: 'react' | 'vue'
+}
+
+function assembleRoutesFile<State>(
+  root: RouteNode,
+  ctx: GenerateContext,
+  config: FrameworkGeneratorConfig<State>,
+): string {
+  const resolved = withFallbackPaths(root, ctx)
+  const imports = new Map<string, ImportRef>()
+  const usedNames = new Set<string>()
+  const routeLines: string[] = []
+  collectRoutes(root, resolved, imports, usedNames, '  ', routeLines, config.initialState, config.emitter)
+  let finalLines = prettifyRouteBlocks(routeLines)
+  if (resolved.baseRoute && !root.layoutPath) {
+    finalLines = wrapBaseRoute(finalLines, resolved.baseRoute, '  ')
+  }
+
+  const importLines: string[] = []
+  for (const ref of imports.values()) {
+    const line = config.formatImport(ref, ctx.outFile)
+    if (line) importLines.push(line)
+  }
+
+  const typeImports = ctx.outputLanguage === 'js' || !config.typeImport
+    ? []
+    : [config.typeImport]
+  const runtimeImports = config.runtimeImports(config.initialState)
+
+  const hasHeader = typeImports.length || runtimeImports.length || importLines.length
+  return attachGeneratedManifest([
+    GENERATED_BANNER,
+    ...typeImports,
+    ...runtimeImports,
+    ...importLines,
+    ...(hasHeader ? [''] : []),
+    ...typedRoutesSection(ctx, root),
+    ...routesFileTail(ctx, config.framework, finalLines),
+  ].join('\n'))
+}
+
 const reactEmitter: RouteEmitter<void> = {
   layoutRoute: (node, ctx, imports, usedNames, indent, _state, options) =>
     emitReactLayoutRoute(node, ctx, imports, usedNames, indent, options),
@@ -667,40 +757,22 @@ const vueEmitter: RouteEmitter<{ usesDefineAsyncComponent: boolean }> = {
 }
 
 export function generateReactRoutes(root: RouteNode, ctx: GenerateContext): string {
-  const resolved = withFallbackPaths(root, ctx)
-  const imports = new Map<string, ImportRef>()
-  const usedNames = new Set<string>()
-  const routeLines: string[] = []
-  collectRoutes(root, resolved, imports, usedNames, '  ', routeLines, undefined, reactEmitter)
-  let finalLines = prettifyRouteBlocks(routeLines)
-  if (resolved.baseRoute && !root.layoutPath) {
-    finalLines = wrapBaseRoute(finalLines, resolved.baseRoute, '  ')
-  }
-
-  const importLines: string[] = []
-  for (const { id, filePath, isLazy, namedBindings } of imports.values()) {
-    if (isLazy) continue
-    const rel = posixRelative(ctx.outFile, filePath)
-    if (namedBindings?.length) {
-      const bindings = namedBindings.map(({ imported, local }) => `${imported} as ${local}`)
-      importLines.push(`import { default as ${id}, ${bindings.join(', ')} } from ${quotedModulePath(rel)}`)
-    } else {
-      importLines.push(`import ${id} from ${quotedModulePath(rel)}`)
-    }
-  }
-
-  const typeImports = ctx.outputLanguage === 'js'
-    ? []
-    : [`import type { RouteObject } from 'react-router-dom'`]
-
-  return attachGeneratedManifest([
-    GENERATED_BANNER,
-    ...typeImports,
-    ...importLines,
-    ...(typeImports.length || importLines.length ? [''] : []),
-    ...typedRoutesSection(ctx, root),
-    ...routesFileTail(ctx, 'react', finalLines),
-  ].join('\n'))
+  return assembleRoutesFile(root, ctx, {
+    emitter: reactEmitter,
+    initialState: undefined,
+    formatImport: (ref, outFile) => {
+      if (ref.isLazy) return null
+      const rel = posixRelative(outFile, ref.filePath)
+      if (ref.namedBindings?.length) {
+        const bindings = ref.namedBindings.map(({ imported, local }) => `${imported} as ${local}`)
+        return `import { default as ${ref.id}, ${bindings.join(', ')} } from ${quotedModulePath(rel)}`
+      }
+      return `import ${ref.id} from ${quotedModulePath(rel)}`
+    },
+    typeImport: `import type { RouteObject } from 'react-router-dom'`,
+    runtimeImports: () => [],
+    framework: 'react',
+  })
 }
 
 function emitVueRouteBlockFields(node: RouteNode, indent: string): string[] {
@@ -825,21 +897,8 @@ function emitVueNestedLeaf(
     lines.push(`${childIndent}path: ${JSON.stringify(node.routeBlock?.path ?? node.path)},`)
   }
 
-  if (isLazy) {
-    const component = vueComponentBody(
-      importPath,
-      vueAsyncExtras(ctx, imports, usedNames, node.loadingPath, node.errorPath),
-    )
-    if (component.usesDefineAsyncComponent) state.usesDefineAsyncComponent = true
-    pushMultilineField(lines, childIndent, 'component', component.lines)
-  } else {
-    const id = allocImport(node.filePath, false, imports, usedNames)
-    lines.push(`${childIndent}component: ${id},`)
-  }
-
-  lines.push(...emitVueRouteBlockFields(node, childIndent))
-  const meta = formatVueMeta(node.meta, childIndent)
-  if (meta) lines.push(meta)
+  emitVueLeafComponent(lines, childIndent, node, ctx, imports, usedNames, importPath, isLazy, state)
+  emitVueLeafMeta(lines, node, childIndent)
   lines.push(`${indent}},`)
   return lines
 }
@@ -862,58 +921,23 @@ function emitVueAbsoluteLeaf(
   lines.push(`${indent}{`)
   lines.push(`${childIndent}path: ${JSON.stringify(vueResolvedPath(node))},`)
 
-  if (isLazy) {
-    const component = vueComponentBody(
-      importPath,
-      vueAsyncExtras(ctx, imports, usedNames, node.loadingPath, node.errorPath),
-    )
-    if (component.usesDefineAsyncComponent) state.usesDefineAsyncComponent = true
-    pushMultilineField(lines, childIndent, 'component', component.lines)
-  } else {
-    const id = allocImport(node.filePath, false, imports, usedNames)
-    lines.push(`${childIndent}component: ${id},`)
-  }
-
-  lines.push(...emitVueRouteBlockFields(node, childIndent))
-  const meta = formatVueMeta(node.meta, childIndent)
-  if (meta) lines.push(meta)
+  emitVueLeafComponent(lines, childIndent, node, ctx, imports, usedNames, importPath, isLazy, state)
+  emitVueLeafMeta(lines, node, childIndent)
   lines.push(`${indent}},`)
   return lines
 }
 
 export function generateVueRoutes(root: RouteNode, ctx: GenerateContext): string {
-  const resolved = withFallbackPaths(root, ctx)
-  const imports = new Map<string, ImportRef>()
-  const usedNames = new Set<string>()
-  const routeLines: string[] = []
-  const state = { usesDefineAsyncComponent: false }
-  collectRoutes(root, resolved, imports, usedNames, '  ', routeLines, state, vueEmitter)
-  let finalLines = prettifyRouteBlocks(routeLines)
-  if (resolved.baseRoute && !root.layoutPath) {
-    finalLines = wrapBaseRoute(finalLines, resolved.baseRoute, '  ')
-  }
-
-  const importLines: string[] = []
-  for (const { id, filePath, isLazy } of imports.values()) {
-    if (!isLazy) {
-      importLines.push(`import ${id} from ${quotedModulePath(posixRelative(ctx.outFile, filePath))}`)
-    }
-  }
-
-  const typeImports = ctx.outputLanguage === 'js'
-    ? []
-    : [`import type { RouteRecordRaw } from 'vue-router'`]
-  const runtimeImports = state.usesDefineAsyncComponent
-    ? [`import { defineAsyncComponent } from 'vue'`]
-    : []
-
-  return attachGeneratedManifest([
-    GENERATED_BANNER,
-    ...typeImports,
-    ...runtimeImports,
-    ...importLines,
-    ...(typeImports.length || runtimeImports.length || importLines.length ? [''] : []),
-    ...typedRoutesSection(ctx, root),
-    ...routesFileTail(ctx, 'vue', finalLines),
-  ].join('\n'))
+  return assembleRoutesFile(root, ctx, {
+    emitter: vueEmitter,
+    initialState: { usesDefineAsyncComponent: false },
+    formatImport: (ref, outFile) => {
+      if (ref.isLazy) return null
+      return `import ${ref.id} from ${quotedModulePath(posixRelative(outFile, ref.filePath))}`
+    },
+    typeImport: `import type { RouteRecordRaw } from 'vue-router'`,
+    runtimeImports: (state) =>
+      state.usesDefineAsyncComponent ? [`import { defineAsyncComponent } from 'vue'`] : [],
+    framework: 'vue',
+  })
 }
