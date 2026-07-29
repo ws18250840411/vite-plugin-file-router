@@ -5,7 +5,7 @@ import path from 'node:path'
 import { collectRuntimeExports, parseModule, readStaticMetaFromAst } from './module-ast'
 import { mergeRouteMeta, readVueRouteBlockResult } from './vue-route-block'
 import { isCatchAllSegment, isGroupDir, joinUrlPath, nameToSegment } from './path-parser'
-import type { RouteDiagnostic, RouteNode } from '../types'
+import type { RouteNode } from '../types'
 
 const LOADING_SUFFIXES: [string, 'sync' | 'lazy'][] = [['.sync', 'sync'], ['.lazy', 'lazy']]
 const LAYOUT_FILE = '_layout'
