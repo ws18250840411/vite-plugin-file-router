@@ -200,6 +200,7 @@ fileRouter({
   transformRoutes(root) {
     return root
   },
+  typedRoutes: true, // 可选：生成 RoutePaths 类型
 })
 ```
 

@@ -89,6 +89,24 @@ Vue JSON/JSON5/YAML `<route>` blocks support `path`, `name`, `alias`, `props`, a
 Keep the trailing `@vite-file-router-manifest` comment. It stores generator fingerprints only and has no runtime behavior.
 If it is damaged or from an unsupported version, merging safely falls back without a baseline; existing fields remain, but previous generated-field deletions cannot be inferred.
 
+## Typed Routes
+
+Enable `typedRoutes` to get a `RoutePaths` union type in the generated file for compile-time path validation:
+
+```ts
+// routes.ts (auto-generated)
+export type RoutePaths = '/' | '/about' | '/user/:id'
+export const routes = [/* ... */]
+```
+
+```tsx
+import type { RoutePaths } from './routes'
+<Link to={'/about' satisfies RoutePaths}>About</Link>  // ✅ valid path
+<Link to={'/typo'  satisfies RoutePaths}>Typo</Link>  // ❌ compile error
+```
+
+> TS output only; catch-all routes excluded. Updated automatically on page add/remove.
+
 ## Options
 
 ```ts
@@ -106,7 +124,6 @@ fileRouter({
 
 Generated client routes are ESM. Use `.ts`, `.js`, or `.mjs`; `.cjs` is rejected. CommonJS Vite configs remain supported.
 
-`typedRoutes: true` emits a `RoutePaths` union type in the routes file for compile-time path validation. TS output only.
 
 ## Reliability and Performance
 
