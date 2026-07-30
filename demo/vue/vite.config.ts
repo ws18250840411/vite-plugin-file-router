@@ -1,12 +1,8 @@
-import path from 'node:path'
-
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import fileRouter from '../../src/index.ts'
+import fileRouter from 'vite-plugin-file-router'
 
 export default defineConfig({
-  root: import.meta.dirname,
-  cacheDir: path.resolve(import.meta.dirname, '../../node_modules/.vite-vue-demo'),
   plugins: [
     vue(),
     fileRouter({

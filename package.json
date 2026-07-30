@@ -41,9 +41,9 @@
     "test:watch": "vitest",
     "fixtures:update": "cross-env UPDATE_MERGE_FIXTURES=1 vitest run src/__tests__/gen-merge-fixtures.test.ts",
     "test:e2e": "playwright test",
-    "demo:react": "vite --config demo/react/vite.config.ts --port 5199 --strictPort",
+    "demo:react": "cd demo/react && npm i && vite --port 5199 --strictPort",
     "demo:react-js": "vite --config demo/react-js/vite.config.js --port 5201 --strictPort",
-    "demo:vue": "vite --config demo/vue/vite.config.ts --port 5200 --strictPort",
+    "demo:vue": "cd demo/vue && npm i && vite --port 5200 --strictPort",
     "demo:vue-rootless": "vite --config demo/vue-rootless/vite.config.ts --port 5202 --strictPort",
     "test:compat": "node scripts/install-compat.mjs",
     "verify": "npm test && npm run build && npm run test:compat && npm run test:e2e && npm run pack:check"
