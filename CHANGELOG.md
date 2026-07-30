@@ -1,5 +1,44 @@
 # Changelog
 
+## 2.2.0 - 2026-07-30
+
+### Added
+
+- **Route feature type exports**: auto-generates `LoaderRoutes`, `ActionRoutes`, and `MiddlewareRoutes` union types based on detected module exports. Enables type-safe middleware composition and loader data access.
+- **Route guards types**: when pages declare `meta.guards: string[]`, generates `RouteGuards` interface and `GuardedRoutes` union type for type-safe guard composition.
+- **Type-safe redirect**: generates `typedRedirect` helper function and `RedirectTarget` type alongside `buildPath`, ensuring redirect targets are valid route paths with proper param substitution.
+- **Sitemap generation** (`generateSitemap` API): produces a valid `sitemap.xml` string from the route tree. Automatically excludes dynamic routes (`:param`) and supports custom exclusion patterns, `changefreq`, `priority`, and `lastmod` options.
+- **SSR manifest prefetch hints**: manifest entries now include `prefetch` field from `meta.prefetch` and `hasMiddleware` detection.
+- **`SitemapOptions` type** exported from the public API for type-safe sitemap configuration.
+
+**Tests**: 209 → 217 (all passing). TypeScript, build, and lint: zero errors.
+
+## 2.1.0 - 2026-07-30
+
+### Added
+
+- **Deep type-safe routing**: `typedRoutes` now generates `RouteParams` interface (mapping paths to their param types), `DynamicRoutePaths` / `StaticRoutePaths` union types, and a type-safe `buildPath()` helper function with full overload signatures. Dynamic params (`:id`), optional params (`:slug?`), and static routes are all correctly typed.
+- **Virtual Routes** (`virtualRoutes` option): define routes that bypass filesystem scanning. Ideal for admin panels, legacy routes, or programmatically generated routes. Virtual routes integrate with the three-way merge and type generation systems.
+- **Auto code splitting** (`autoCodeSplitting` option): `'layout'` mode sync-imports layouts while lazy-loading pages (optimal first-paint performance); `true`/`'route'` makes everything lazy. Per-file `.sync`/`.lazy` suffixes still take precedence.
+- **Modal routes** (`+filename` convention): files prefixed with `+` are collected as modal routes, generating a separate `export const modalRoutes` array and `ModalPaths` type. Modals from subdirectories are bubbled up to the root.
+- **SSR manifest** (`ssrManifest` option): generates `routes.manifest.json` alongside the routes file, mapping each route to its component file path, loader/action presence, and metadata — enabling server-side pre-loading and static analysis.
+- **i18n routing** (`i18n` option): generates locale-prefixed copies of all routes with `Locale` type, `defaultLocale`, `locales` array, and prefix strategies (`'never'` / `'always'`).
+- **Search params type inference**: detects `export const searchParams` in page files and generates a `SearchParams` interface mapping paths to their query parameter schemas.
+- **Parallel routes / named slots** (`@slotname` directory convention): generates `slots` object and `SlotNames` type for parallel rendering (dashboards, panels, etc.).
+- **Route inspector** (`inspectRoutes` API): visualizes the full route tree in the terminal with modals, slots, and search params.
+
+### Fixed
+
+- **Node.js compatibility**: lowered `engines` requirement from `>=24.11.0` to `>=18.0.0`. Replaced `flush: true` in `fs.writeFileSync` (Node 21+ only) with explicit `openSync`→`writeSync`→`fsyncSync`→`closeSync` for full Node 18/20/22/24 support.
+
+### Changed
+
+- `.nvmrc` now reflects the recommended local dev version (24.6.0), while `engines` permits Node 18+.
+- `resolveImportMode` now accepts layout context and autoCodeSplitting strategy for fine-grained control.
+- Scanner now detects `+filename` files and bubbles `ModalRouteNode[]` upward through the route tree.
+
+**Tests**: 190 → 209 (all passing). TypeScript, build, and lint: zero errors.
+
 ## 2.0.3 - 2026-07-28
 
 ### Fixed

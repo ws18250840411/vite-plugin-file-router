@@ -13,7 +13,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=24.11.0"
+    "node": ">=18.0.0"
   },
   "type": "module",
   "main": "./dist/index.cjs",
@@ -37,6 +37,7 @@
     "bench": "npm run build && node --expose-gc bench/run.mjs",
     "pack:check": "node scripts/check-package.mjs",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "fixtures:update": "cross-env UPDATE_MERGE_FIXTURES=1 vitest run src/__tests__/gen-merge-fixtures.test.ts",
     "test:e2e": "playwright test",
@@ -71,6 +72,7 @@
     "@types/node": "^26.1.1",
     "@vitejs/plugin-react": "^6.0.3",
     "@vitejs/plugin-vue": "^6.0.8",
+    "@vitest/coverage-v8": "^4.1.10",
     "cross-env": "^10.1.0",
     "esbuild": "^0.28.1",
     "fast-check": "^4.9.0",

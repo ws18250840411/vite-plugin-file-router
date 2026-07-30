@@ -119,3 +119,28 @@ export function readStaticMetaFromAst(parsed: ParsedModule): RouteMeta | undefin
   }
   return undefined
 }
+
+/**
+ * Read `export const searchParams = { key: 'type', ... }` from a module AST.
+ * Returns a record mapping param names to their declared type strings.
+ * Supported type values: 'string', 'number', 'boolean', 'string[]', 'number[]'.
+ */
+export function readSearchParamsFromAst(parsed: ParsedModule): Record<string, string> | undefined {
+  for (const statement of parsed.ast.program.body as any[]) {
+    if (statement.type !== 'ExportNamedDeclaration' || statement.declaration?.type !== 'VariableDeclaration') continue
+    for (const declaration of statement.declaration.declarations) {
+      if (declaration.id?.type !== 'Identifier' || declaration.id.name !== 'searchParams') continue
+      const value = unwrapExpression(declaration.init)
+      const result = literalValue(value)
+      if (result && typeof result === 'object' && !Array.isArray(result)) {
+        const params = result as Record<string, unknown>
+        const validated: Record<string, string> = {}
+        for (const [key, val] of Object.entries(params)) {
+          if (typeof val === 'string') validated[key] = val
+        }
+        return Object.keys(validated).length > 0 ? validated : undefined
+      }
+    }
+  }
+  return undefined
+}

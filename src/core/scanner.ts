@@ -2,10 +2,10 @@ import { ROUTE_MODULE_EXPORT_NAMES } from './constants'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { collectRuntimeExports, parseModule, readStaticMetaFromAst } from './module-ast'
+import { collectRuntimeExports, parseModule, readSearchParamsFromAst, readStaticMetaFromAst } from './module-ast'
 import { mergeRouteMeta, readVueRouteBlockResult } from './vue-route-block'
 import { isCatchAllSegment, isGroupDir, joinUrlPath, nameToSegment } from './path-parser'
-import type { RouteNode } from '../types'
+import type { ModalRouteNode, RouteNode } from '../types'
 
 const LOADING_SUFFIXES: [string, 'sync' | 'lazy'][] = [['.sync', 'sync'], ['.lazy', 'lazy']]
 const LAYOUT_FILE = '_layout'
@@ -93,6 +93,10 @@ function analyzePageSource(filePath: string, src: string) {
       (meta, parsed) => ({ ...meta, ...readStaticMetaFromAst(parsed) }),
       {} as Record<string, unknown>,
     )
+    const searchParams = parsedModules.reduce(
+      (sp, parsed) => ({ ...sp, ...readSearchParamsFromAst(parsed) }),
+      {} as Record<string, string>,
+    )
     const meta = mergeRouteMeta(Object.keys(exportedMeta).length ? exportedMeta : undefined, routeBlockRaw?.meta)
     const { meta: _blockMeta, ...routeBlockRest } = routeBlockRaw ?? {}
     return {
@@ -100,6 +104,7 @@ function analyzePageSource(filePath: string, src: string) {
       meta,
       moduleExports: Object.keys(moduleExports).length > 0 ? moduleExports : undefined,
       routeBlock: routeBlockRaw ? routeBlockRest : undefined,
+      searchParams: Object.keys(searchParams).length > 0 ? searchParams : undefined,
       scanError: routeResult.error,
     }
   } catch (error) {
@@ -194,6 +199,7 @@ function makePageNode(
     ...(info.meta ? { meta: info.meta } : {}),
     ...(info.moduleExports ? { moduleExports: info.moduleExports } : {}),
     ...(info.routeBlock ? { routeBlock: info.routeBlock } : {}),
+    ...(info.searchParams ? { searchParams: info.searchParams } : {}),
     ...(importOverride ? { importOverride } : {}),
     ...(isNotFound ? { isNotFound: true } : {}),
     isGroup: false,
@@ -255,6 +261,8 @@ function scanDirInternal(
   const indexNodes: RouteNode[] = []
   const pageNodes: RouteNode[] = []
   const dirNodes: RouteNode[] = []
+  const modalNodes: ModalRouteNode[] = []
+  let slots: Record<string, RouteNode> | undefined
 
   for (const dirent of entries) {
     const entry = dirent.name
@@ -266,6 +274,16 @@ function scanDirInternal(
       if (entry.startsWith('_')) continue
       const rel = normalizeRelative(path.relative(scanRoot, absPath))
       if (matchExclude(rel, context.excludePatterns)) continue
+
+      // Parallel route slot: @slotName directory
+      if (entry.startsWith('@')) {
+        const slotName = entry.slice(1)
+        const slotNode = scanDirInternal(absPath, urlBase, options, scanRoot, context)
+        slotNode.routeId = `slot:${slotName}:${rel}`
+        if (!slots) slots = {}
+        slots[slotName] = slotNode
+        continue
+      }
 
       const group = isGroupDir(entry)
       const segment = group ? null : nameToSegment(entry)
@@ -289,6 +307,22 @@ function scanDirInternal(
 
     const rawName = stripExt(entry, extRe)
     if (rawName.startsWith('_') || rawName === LOADING_FILE || rawName === ERROR_FILE) continue
+
+    // Modal route: +filename convention
+    if (rawName.startsWith('+')) {
+      const { cleanName: modalClean, importOverride: modalImport } = parseImportSuffix(rawName.slice(1))
+      const info = readPageInfo(absPath)
+      const modalPath = `/${modalClean}`
+      modalNodes.push({
+        routeId: `modal:${rel}`,
+        path: modalPath,
+        filePath: absPath,
+        hasDefaultExport: info.hasDefaultExport,
+        ...(info.meta ? { meta: info.meta } : {}),
+        ...(modalImport ? { importOverride: modalImport } : {}),
+      })
+      continue
+    }
 
     const { cleanName: name, importOverride } = parseImportSuffix(rawName)
     const segment = nameToSegment(name)
@@ -318,6 +352,11 @@ function scanDirInternal(
     .filter(Boolean)
     .join('\n') || undefined
 
+  const allModals = [
+    ...modalNodes,
+    ...dirNodes.flatMap((d) => d.modals ?? []),
+  ]
+
   return {
     routeId: layoutPath
       ? `layout:${normalizeRelative(path.relative(scanRoot, layoutPath))}`
@@ -339,6 +378,8 @@ function scanDirInternal(
     isGroup: false,
     groupName: null,
     children: [...indexNodes, ...regular, ...dirNodes, ...catchAll],
+    ...(allModals.length > 0 ? { modals: allModals } : {}),
+    ...(slots ? { slots } : {}),
   }
 }
 

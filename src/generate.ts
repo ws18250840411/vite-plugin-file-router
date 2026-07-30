@@ -7,7 +7,7 @@ import { collectRouteDiagnostics, scanDir } from './core/scanner'
 import { normalizeBaseRoute } from './core/path-parser'
 import { generateReactRoutes, generateVueRoutes } from './emit/codegen'
 import { mergeRouteFiles } from './emit/merge-routes'
-import type { FileRouterOptions, GenerateContext, OutputLanguage, RouteNode } from './types'
+import type { FileRouterOptions, GenerateContext, OutputLanguage, RouteNode, VirtualRoute } from './types'
 
 const EMPTY_ROOT: RouteNode = {
   routeId: 'dir:empty',
@@ -36,6 +36,10 @@ export interface ResolvedOptions {
   logDiagnostics: boolean
   failOnRouteError: boolean
   typedRoutes: boolean
+  virtualRoutes: VirtualRoute[]
+  autoCodeSplitting: boolean | 'route' | 'layout'
+  ssrManifest: boolean
+  i18n?: FileRouterOptions['i18n']
 }
 
 const generationSignatures = new Map<string, string>()
@@ -180,17 +184,52 @@ export function resolveOptions(root: string, options: FileRouterOptions = {}): R
     logDiagnostics: options.logDiagnostics ?? true,
     failOnRouteError: options.failOnRouteError ?? true,
     typedRoutes: options.typedRoutes ?? false,
+    virtualRoutes: options.virtualRoutes ?? [],
+    autoCodeSplitting: options.autoCodeSplitting ?? false,
+    ssrManifest: options.ssrManifest ?? false,
+    i18n: options.i18n,
+  }
+}
+
+function virtualRouteToNode(vr: VirtualRoute, root: string, importMode: 'lazy' | 'sync'): RouteNode {
+  const filePath = path.isAbsolute(vr.component) ? vr.component : path.resolve(root, vr.component)
+  const segment = vr.path.startsWith('/') ? vr.path : `/${vr.path}`
+  return {
+    routeId: `virtual:${segment}`,
+    path: vr.path.startsWith('/') ? vr.path.slice(1) || '' : vr.path,
+    urlPath: segment,
+    filePath,
+    layoutPath: null,
+    loadingPath: null,
+    errorPath: null,
+    hasDefaultExport: true,
+    ...(vr.meta ? { meta: vr.meta } : {}),
+    ...(vr.importMode ? { importOverride: vr.importMode } : {}),
+    isGroup: false,
+    groupName: null,
+    children: (vr.children ?? []).map((child) => virtualRouteToNode(child, root, importMode)),
   }
 }
 
 export function scanPages(resolved: ResolvedOptions): RouteNode {
-  if (!fs.existsSync(resolved.pagesDir)) return { ...EMPTY_ROOT, children: [] }
+  let root: RouteNode
+  if (!fs.existsSync(resolved.pagesDir)) {
+    root = { ...EMPTY_ROOT, children: [] }
+  } else {
+    root = scanDir(resolved.pagesDir, resolved.baseRoute, {
+      extensions: resolved.extensions,
+      exclude: resolved.exclude,
+      baseRoute: resolved.baseRoute,
+    })
+  }
 
-  let root = scanDir(resolved.pagesDir, resolved.baseRoute, {
-    extensions: resolved.extensions,
-    exclude: resolved.exclude,
-    baseRoute: resolved.baseRoute,
-  })
+  if (resolved.virtualRoutes.length > 0) {
+    const projectRoot = path.dirname(resolved.outFile)
+    const virtualNodes = resolved.virtualRoutes.map((vr) =>
+      virtualRouteToNode(vr, projectRoot, resolved.importMode),
+    )
+    root.children = [...root.children, ...virtualNodes]
+  }
 
   if (resolved.transformRoutes) {
     const result = resolved.transformRoutes(root)
@@ -213,6 +252,8 @@ export function generateRouteFiles(resolved: ResolvedOptions, rootNode: RouteNod
     globalLoadingPath: rootNode.loadingPath,
     globalErrorPath: rootNode.errorPath,
     typedRoutes: resolved.typedRoutes,
+    autoCodeSplitting: resolved.autoCodeSplitting,
+    i18n: resolved.i18n,
   }
 
   const rawContent = resolved.framework === 'vue'
@@ -239,7 +280,13 @@ export function writeRouteFiles(
 
     const tempFile = `${resolved.outFile}.${process.pid}.${randomUUID()}.tmp`
     try {
-      fs.writeFileSync(tempFile, next, { encoding: 'utf8', flush: true })
+      const fd = fs.openSync(tempFile, 'w')
+      try {
+        fs.writeSync(fd, next, 0, 'utf8')
+        fs.fsyncSync(fd)
+      } finally {
+        fs.closeSync(fd)
+      }
       fs.renameSync(tempFile, resolved.outFile)
     } finally {
       if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile)
@@ -249,6 +296,64 @@ export function writeRouteFiles(
   } finally {
     releaseLock()
   }
+}
+
+interface RouteManifestEntry {
+  path: string
+  component: string
+  hasLoader?: boolean
+  hasAction?: boolean
+  hasMiddleware?: boolean
+  prefetch?: 'intent' | 'viewport' | 'none'
+  meta?: Record<string, unknown>
+  children?: RouteManifestEntry[]
+}
+
+function buildRouteManifest(node: RouteNode, pagesDir: string): RouteManifestEntry[] {
+  const entries: RouteManifestEntry[] = []
+  for (const child of node.children) {
+    if (child.filePath) {
+      const entry: RouteManifestEntry = {
+        path: child.urlPath,
+        component: path.relative(pagesDir, child.filePath),
+      }
+      if (child.moduleExports?.loader) entry.hasLoader = true
+      if (child.moduleExports?.action) entry.hasAction = true
+      if (child.moduleExports?.middleware) entry.hasMiddleware = true
+      if (child.meta?.prefetch && typeof child.meta.prefetch === 'string') {
+        entry.prefetch = child.meta.prefetch as 'intent' | 'viewport' | 'none'
+      }
+      if (child.meta && Object.keys(child.meta).length > 0) entry.meta = child.meta
+      if (child.children.length > 0) {
+        const nested = buildRouteManifest(child, pagesDir)
+        if (nested.length > 0) entry.children = nested
+      }
+      entries.push(entry)
+    } else if (child.layoutPath) {
+      const entry: RouteManifestEntry = {
+        path: child.urlPath,
+        component: path.relative(pagesDir, child.layoutPath),
+      }
+      if (child.children.length > 0) {
+        entry.children = buildRouteManifest(child, pagesDir)
+      }
+      entries.push(entry)
+    } else if (child.children.length > 0) {
+      entries.push(...buildRouteManifest(child, pagesDir))
+    }
+  }
+  return entries
+}
+
+function writeSSRManifest(resolved: ResolvedOptions, rootNode: RouteNode): void {
+  if (!resolved.ssrManifest) return
+  const manifestPath = resolved.outFile.replace(/\.\w+$/, '.manifest.json')
+  const manifest = {
+    generatedAt: new Date().toISOString(),
+    framework: resolved.framework,
+    routes: buildRouteManifest(rootNode, resolved.pagesDir),
+  }
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8')
 }
 
 export function runGeneration(
@@ -282,6 +387,7 @@ export function runGeneration(
 
   if (changed) {
     log(`[vite-plugin-file-router] Generated ${path.relative(process.cwd(), resolved.outFile)}`)
+    writeSSRManifest(resolved, rootNode)
   }
 
   return { rootNode, changed }

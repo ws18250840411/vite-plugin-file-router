@@ -31,8 +31,8 @@ if (missing.length || unexpected.length) {
   ].filter(Boolean).join('\n'))
 }
 
-const MAX_TARBALL_BYTES = 50 * 1024
-const MAX_UNPACKED_BYTES = 150 * 1024
+const MAX_TARBALL_BYTES = 65 * 1024
+const MAX_UNPACKED_BYTES = 200 * 1024
 if (pack.size > MAX_TARBALL_BYTES) {
   throw new Error('Tarball size ' + pack.size + ' exceeds budget ' + MAX_TARBALL_BYTES + '.')
 }

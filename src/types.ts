@@ -25,6 +25,22 @@ export interface VueRouteBlockOverride {
   props?: boolean | Record<string, unknown>
 }
 
+/** A modal route detected from `+filename` convention. */
+export interface ModalRouteNode {
+  /** Stable identity. */
+  routeId: string
+  /** Modal path (e.g. "/login" from `+login.tsx`). */
+  path: string
+  /** Absolute path to the modal component file. */
+  filePath: string
+  /** Whether the file has a default export. */
+  hasDefaultExport: boolean
+  /** Static metadata. */
+  meta?: RouteMeta
+  /** Import mode override. */
+  importOverride?: 'sync' | 'lazy'
+}
+
 export interface RouteNode {
   /** Stable generator identity relative to `pagesDir`. */
   routeId: string
@@ -58,6 +74,8 @@ export interface RouteNode {
   layoutImportOverride?: 'sync' | 'lazy'
   /** Vue `<route>` block overrides. */
   routeBlock?: VueRouteBlockOverride
+  /** Declared search params schema from `export const searchParams = {...}`. */
+  searchParams?: Record<string, string>
   /** True for 404 / not-found catch-all pages. */
   isNotFound?: boolean
   /** Route group — URL segment omitted. Convention: `(groupName)/`. */
@@ -69,6 +87,10 @@ export interface RouteNode {
    */
   importOverride?: 'sync' | 'lazy'
   children: RouteNode[]
+  /** Modal routes (`+filename`) found in this directory. */
+  modals?: ModalRouteNode[]
+  /** Parallel route slots (`@slotName/` directories). */
+  slots?: Record<string, RouteNode>
 }
 
 export interface RouteDiagnostic {
@@ -85,6 +107,23 @@ export interface RouteDiagnostic {
 }
 
 export type Framework = 'react' | 'vue'
+
+/**
+ * A virtual route definition that bypasses filesystem scanning.
+ * Virtual routes are merged with filesystem routes during code generation.
+ */
+export interface VirtualRoute {
+  /** URL path for this route (e.g. "/settings", "/admin/:section"). */
+  path: string
+  /** Absolute or relative (to project root) path to the component file. */
+  component: string
+  /** Optional nested children. */
+  children?: VirtualRoute[]
+  /** Route metadata. */
+  meta?: RouteMeta
+  /** Import mode override for this virtual route. */
+  importMode?: 'lazy' | 'sync'
+}
 
 export interface FileRouterOptions {
   /**
@@ -154,6 +193,45 @@ export interface FileRouterOptions {
    * @default false
    */
   typedRoutes?: boolean
+  /**
+   * Virtual routes that bypass filesystem scanning.
+   * These are merged with filesystem-scanned routes during generation.
+   * Useful for routes that don't follow the filesystem convention.
+   * @default []
+   */
+  virtualRoutes?: VirtualRoute[]
+  /**
+   * Automatic code-splitting strategy.
+   * - `true` / `'route'`: every route is lazy-loaded (equivalent to `importMode: 'lazy'`)
+   * - `'layout'`: layouts are sync-imported, pages are lazy (optimal for initial load)
+   * - `false`: respect `importMode` setting as-is
+   * @default false
+   */
+  autoCodeSplitting?: boolean | 'route' | 'layout'
+  /**
+   * Generate `route-manifest.json` alongside `routes.ts` for SSR / preloading.
+   * The manifest maps each route path to its component file, enabling
+   * server-side frameworks to preload or statically analyze route chunks.
+   * @default false
+   */
+  ssrManifest?: boolean
+  /**
+   * i18n routing configuration.
+   * When provided, generates locale-prefixed copies of all routes.
+   * @example { locales: ['en', 'zh'], defaultLocale: 'en' }
+   */
+  i18n?: {
+    /** Supported locale codes (e.g. ['en', 'zh', 'ja']). */
+    locales: string[]
+    /** Default locale — its routes have no prefix. */
+    defaultLocale: string
+    /** Prefix strategy for the default locale.
+     * - `'never'`: default locale has no prefix (e.g. `/about`)
+     * - `'always'`: all locales get prefix (e.g. `/en/about`)
+     * @default 'never'
+     */
+    strategy?: 'never' | 'always'
+  }
 }
 
 export interface GenerateContext {
@@ -171,4 +249,8 @@ export interface GenerateContext {
   globalErrorPath?: string | null
   /** Whether to emit a `RoutePaths` union type. @default false */
   typedRoutes?: boolean
+  /** @default false */
+  autoCodeSplitting?: boolean | 'route' | 'layout'
+  /** i18n configuration for locale-aware type generation. */
+  i18n?: FileRouterOptions['i18n']
 }
